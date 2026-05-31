@@ -1,8 +1,7 @@
 // Onboarding screen 2 — name entry
-// Nametag sticker image with an editable TextInput overlaid on the white area.
-//
-// NOTE: Work Sans font — add @expo-google-fonts/work-sans and load in root _layout.tsx
-// to match the design exactly. Uses system font until then.
+// Faithfully implements Figma node 152:164
+// NOTE: Work Sans font — run: npx expo install @expo-google-fonts/work-sans expo-font
+// then load in root _layout.tsx. Uses system font until then.
 
 import { useRef, useState } from 'react';
 import {
@@ -14,60 +13,37 @@ import {
   useWindowDimensions,
   Keyboard,
   TouchableWithoutFeedback,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 
-// Save the nametag image to assets/images/nametag.png
+// Place the nametag image at assets/images/nametag.png
 const NAMETAG_IMAGE = require('@/assets/images/nametag.png');
 
-// Figma frame dimensions (base design at 393px wide)
-const BASE_WIDTH = 393;
-const BASE_HEIGHT = 844;
+// ─── Figma spec (frame: 393 × 844) ──────────────────────────────────────────
+// Nametag container: fixed 334 × 223, left: 29, top: 295
+const NAMETAG_W = 334;
+const NAMETAG_H = 223;
+const NAMETAG_LEFT = 29;
+const NAMETAG_TOP = 295;
+const FRAME_H = 844;
 
-// Nametag container dimensions & position in Figma frame
-const NAMETAG = {
-  left: 29,
-  top: 295,
-  width: 334,
-  height: 223,
-};
-
-// Image overflows its container (Figma: w-[117.38%], h-[121%], top-[-10.23%], left-[-9.22%])
-const IMG_OVERFLOW = {
-  widthRatio: 1.1738,
-  heightRatio: 1.21,
-  leftRatio: -0.0922,
-  topRatio: -0.1023,
-};
-
-// Name text sits at 50% into the sticker vertically (in the white area)
-const NAME_INPUT_TOP_RATIO = 0.5;
+// Name text: top-[406px] in Figma → 406 − 295 = 111px from top of nametag
+// left-[calc(33.33%+33px)] in Figma frame → rendered centred via textAlign
+const NAME_TOP = 406 - NAMETAG_TOP; // 111
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function NameScreen() {
   const [name, setName] = useState('');
   const inputRef = useRef<TextInput>(null);
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
 
-  const scale = width / BASE_WIDTH;
-
-  const nametag = {
-    left: NAMETAG.left * scale,
-    top: NAMETAG.top * scale,
-    width: NAMETAG.width * scale,
-    height: NAMETAG.height * scale,
-  };
-
-  const imgW = nametag.width * IMG_OVERFLOW.widthRatio;
-  const imgH = nametag.height * IMG_OVERFLOW.heightRatio;
-  const imgLeft = nametag.width * IMG_OVERFLOW.leftRatio;
-  const imgTop = nametag.height * IMG_OVERFLOW.topRatio;
-
-  const inputTop = nametag.height * NAME_INPUT_TOP_RATIO;
-  const fontSize = 24 * scale;
+  // Scale the vertical position proportionally to the device screen height
+  // so the nametag sits in the same relative position as the Figma frame.
+  const topScale = height / FRAME_H;
+  const nametagTop = NAMETAG_TOP * topScale;
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -81,49 +57,29 @@ export default function NameScreen() {
           <Text style={styles.skipText}>skip</Text>
         </Pressable>
 
-        {/* Nametag */}
+        {/* Nametag — fixed 334 × 223, cropped image, editable name overlay */}
         <Pressable
-          style={[
-            styles.nametag,
-            { left: nametag.left, top: nametag.top, width: nametag.width, height: nametag.height },
-          ]}
+          style={[styles.nametag, { left: NAMETAG_LEFT, top: nametagTop }]}
           onPress={() => inputRef.current?.focus()}
         >
-          {/* Sticker image — slightly oversized + offset per Figma */}
-          <View style={styles.imageClip}>
-            <Image
-              source={NAMETAG_IMAGE}
-              style={{
-                position: 'absolute',
-                width: imgW,
-                height: imgH,
-                left: imgLeft,
-                top: imgTop,
-              }}
-              resizeMode="stretch"
-            />
-          </View>
+          <Image
+            source={NAMETAG_IMAGE}
+            style={{ width: NAMETAG_W, height: NAMETAG_H }}
+            resizeMode="contain"
+          />
 
-          {/* Editable name — overlaid on the white area of the sticker */}
+          {/* Editable name — sits in the white area of the sticker */}
           <TextInput
             ref={inputRef}
             value={name}
             onChangeText={setName}
             placeholder="your name"
-            placeholderTextColor="rgba(29, 29, 29, 0.35)"
+            placeholderTextColor="rgba(29,29,29,0.35)"
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
             autoCorrect={false}
             autoCapitalize="characters"
-            style={[
-              styles.nameInput,
-              {
-                top: inputTop,
-                fontSize,
-                lineHeight: fontSize * 1.17,
-                letterSpacing: -0.48 * scale,
-              },
-            ]}
+            style={styles.nameInput}
           />
         </Pressable>
       </SafeAreaView>
@@ -147,21 +103,22 @@ const styles = StyleSheet.create({
   },
   nametag: {
     position: 'absolute',
-  },
-  imageClip: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
+    width: NAMETAG_W,
+    height: NAMETAG_H,
   },
   nameInput: {
     position: 'absolute',
+    top: NAME_TOP,        // 111px — in the white area of the sticker
     left: 0,
     right: 0,
     textAlign: 'center',
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: '700',
+    letterSpacing: -0.48,
     color: Colors.text.primary,
     textTransform: 'uppercase',
     backgroundColor: 'transparent',
-    // Remove default TextInput border/underline
     borderWidth: 0,
     padding: 0,
   },
