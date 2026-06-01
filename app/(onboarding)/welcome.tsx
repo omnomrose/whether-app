@@ -19,7 +19,7 @@ export default function WelcomeScreen() {
       {/* Full-screen tap to proceed */}
       <Pressable style={styles.body} onPress={() => router.push('/(onboarding)/name')}>
         <Text style={styles.heading}>
-          hi. let's get to know each other better!
+          Let's get to know each other better!
         </Text>
       </Pressable>
     </SafeAreaView>
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 43, // ~11% margin matching Figma
   },
   heading: {
     ...Typography.titleLg,

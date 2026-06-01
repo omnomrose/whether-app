@@ -1,7 +1,5 @@
 // Onboarding screen 2 — name entry
 // Faithfully implements Figma node 152:164
-// NOTE: Work Sans font — run: npx expo install @expo-google-fonts/work-sans expo-font
-// then load in root _layout.tsx. Uses system font until then.
 
 import { useRef, useState } from 'react';
 import {
@@ -112,12 +110,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     textAlign: 'center',
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: '700',
-    letterSpacing: -0.48,
-    color: Colors.text.primary,
+    // body-xl: Public Sans Medium 18/22, -0.36 tracking, uppercase
+    ...Typography.bodyXl,
     textTransform: 'uppercase',
+    color: Colors.text.primary,
     backgroundColor: 'transparent',
     borderWidth: 0,
     padding: 0,

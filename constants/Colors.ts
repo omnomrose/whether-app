@@ -1,12 +1,12 @@
 // Design system — colour tokens
-// Source: whether design system (Work Sans, 8px spacing system)
+// Source: whether Figma (variables/colours)
 
 export const Colors = {
   surface: {
     20: '#d4d4d4',
     100: '#f5f4f4',
     150: '#474747',
-    200: '#1d1d1d',
+    200: '#2b1e1e', // dark brownish-black (updated from #1d1d1d)
   },
   primary: {
     10: 'transparent',
@@ -33,7 +33,7 @@ export const Colors = {
     200: '#16a34a',
   },
   text: {
-    primary: '#1d1d1d',
+    primary: '#2b1e1e',
     muted: '#5b5a5a',
   },
 } as const;

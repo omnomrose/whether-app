@@ -1,6 +1,7 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
+The project runs **Expo SDK 54** (downgraded from 56 for Expo Go compatibility).
+Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
 
 ---
 
@@ -32,7 +33,7 @@ People who have a hard time deciding what to wear for the day. This is meant for
 
 ## TECH STACK
 
-- React Native (Expo v56) — mobile framework, iOS first
+- React Native (Expo SDK 54) — mobile framework, iOS first
 - Expo Router — file-based navigation
 - NativeWind v4 — Tailwind styling for React Native
 - Zustand — state management (weatherStore, closetStore, outfitStore)
@@ -93,6 +94,27 @@ See `.env.example` for all required keys:
 - All env vars use `EXPO_PUBLIC_` prefix (required for Expo to expose to client).
 - Never commit `.env` to git.
 - PhotoRoom sandbox mode is fine for development (watermarked output). Switch to production API key before user-facing release.
+
+## PACKAGE MANAGEMENT — NON-NEGOTIABLE
+
+All packages must be compatible with **Expo SDK 54**. Mismatched versions break the build.
+
+**Always install with:**
+```bash
+npx expo install <package>          # lets Expo pick the correct version
+npm install <package> --legacy-peer-deps  # if npx expo install isn't available
+```
+
+**Never use plain `npm install <package>` without `--legacy-peer-deps`** — it will pull in the latest version which may exceed SDK 54 compatibility.
+
+**After any install, verify with:**
+```bash
+npx expo install --check
+```
+If any package shows a version mismatch, run:
+```bash
+npx expo install --fix --legacy-peer-deps
+```
 
 ## MVP SCOPE
 
