@@ -3,6 +3,7 @@
 
 import { useRef, useState } from 'react';
 import {
+  View,
   Text,
   TextInput,
   Image,
@@ -73,13 +74,28 @@ export default function NameScreen() {
             onChangeText={setName}
             placeholder="your name"
             placeholderTextColor="rgba(29,29,29,0.35)"
-            returnKeyType="done"
-            onSubmitEditing={Keyboard.dismiss}
+            returnKeyType="next"
+            onSubmitEditing={() => {
+              Keyboard.dismiss();
+              if (name.trim()) router.push('/(onboarding)/location');
+            }}
             autoCorrect={false}
             autoCapitalize="characters"
             style={styles.nameInput}
           />
         </Pressable>
+        {/* Continue — appears once a name is typed */}
+        {name.trim().length > 0 && (
+          <Pressable
+            style={styles.continueBtn}
+            onPress={() => {
+              Keyboard.dismiss();
+              router.push('/(onboarding)/location');
+            }}
+          >
+            <Text style={styles.continueText}>continue</Text>
+          </Pressable>
+        )}
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
@@ -103,6 +119,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: NAMETAG_W,
     height: NAMETAG_H,
+  },
+  continueBtn: {
+    position: 'absolute',
+    bottom: 48,
+    alignSelf: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: Colors.surface[200],
+    borderRadius: 200,
+  },
+  continueText: {
+    ...Typography.caption,
+    color: Colors.surface[100],
   },
   nameInput: {
     position: 'absolute',

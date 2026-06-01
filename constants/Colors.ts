@@ -3,10 +3,12 @@
 
 export const Colors = {
   surface: {
-    20: '#d4d4d4',
+    10:  'rgba(43,30,30,0.1)', // subtle border
+    20:  '#d4d4d4',
+    30:  '#5b5a5a',            // dim text — unmatched search results
     100: '#f5f4f4',
-    150: '#474747',
-    200: '#2b1e1e', // dark brownish-black (updated from #1d1d1d)
+    150: '#786c6c',            // muted brownish-gray
+    200: '#2b1e1e',            // near-black
   },
   primary: {
     10: 'transparent',

@@ -97,22 +97,46 @@ See `.env.example` for all required keys:
 
 ## PACKAGE MANAGEMENT — NON-NEGOTIABLE
 
-All packages must be compatible with **Expo SDK 54**. Mismatched versions break the build.
+All packages must be compatible with **Expo SDK 54**. Wrong versions break the build silently or with cryptic errors.
 
-**Always install with:**
+### Pinned versions (must match exactly)
+
+| Package | Required version |
+|---|---|
+| `react-native-reanimated` | `~4.1.1` |
+| `react-native-webview` | `13.15.0` |
+| `react-native-worklets` | `0.5.1` |
+| `react-native-screens` | `~4.16.0` |
+| `react-native-safe-area-context` | `~5.6.0` |
+| `expo-router` | `~6.0.24` |
+| `expo-font` | `~14.0.12` |
+| `expo-camera` | `~17.0.10` |
+| `expo-image` | `~3.0.11` |
+| `expo-image-picker` | `~17.0.11` |
+| `expo-location` | `~19.0.8` |
+| `expo-splash-screen` | `~31.0.13` |
+| `expo-status-bar` | `~3.0.9` |
+| `expo-constants` | `~18.0.13` |
+| `expo-linking` | `~8.0.12` |
+| `@react-native-async-storage/async-storage` | `2.2.0` |
+| `react-native` | `0.81.5` |
+| `react` | `19.1.0` |
+
+### Known version traps
+- **`react-native-reanimated`**: Must be `~4.1.1` AND paired with `react-native-worklets@0.5.1`. Both are required — reanimated 4.x imports worklets as a peer. Installing reanimated without worklets gives `Unable to resolve "react-native-worklets"`. Installing 3.16.x gives `Cannot find module 'react-native-worklets/plugin'`. Neither 3.x version works.
+- **`react-native-worklets`**: Always install alongside reanimated. SDK 54 expects `0.5.1`.
+
+### Install rules
 ```bash
-npx expo install <package>          # lets Expo pick the correct version
-npm install <package> --legacy-peer-deps  # if npx expo install isn't available
+# Always use one of these — never plain npm install
+npx expo install <package>
+npm install <package> --legacy-peer-deps
 ```
 
-**Never use plain `npm install <package>` without `--legacy-peer-deps`** — it will pull in the latest version which may exceed SDK 54 compatibility.
-
-**After any install, verify with:**
+After any install, check for drift:
 ```bash
 npx expo install --check
-```
-If any package shows a version mismatch, run:
-```bash
+# If mismatches found:
 npx expo install --fix --legacy-peer-deps
 ```
 
