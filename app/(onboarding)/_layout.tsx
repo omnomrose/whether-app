@@ -5,8 +5,9 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'slide_from_right', // enables iOS swipe-back gesture
-        gestureEnabled: true,
+        animation: 'fade',
+        animationDuration: 380,
+        gestureEnabled: false,
       }}
     />
   );

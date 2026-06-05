@@ -38,4 +38,12 @@ export const Colors = {
     primary: '#2b1e1e',
     muted: '#5b5a5a',
   },
+  // Gradient tokens — pass directly to expo-linear-gradient
+  // Source: Figma variable "linear-clear-sky" (node 144:63)
+  gradient: {
+    clearSky: {
+      colors: ['#78c3f1', '#b4dbf2', '#f5f4f4'] as ['#78c3f1', '#b4dbf2', '#f5f4f4'],
+      locations: [0, 0.702, 1] as [number, number, number],
+    },
+  },
 } as const;

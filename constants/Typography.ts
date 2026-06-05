@@ -17,7 +17,7 @@ export const Typography = {
   titleLg: {
     fontFamily: FontFamily.serif,
     fontSize: 24,
-    lineHeight: 26,
+    lineHeight: 28,
     fontWeight: '400',
     letterSpacing: -1.2,
   } satisfies TextStyle,
