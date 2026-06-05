@@ -32,9 +32,11 @@ const CLOUD_TRAVEL = SCREEN_WIDTH + Math.abs(CLOUD_NATURAL_LEFT); // 1028 px swe
 
 interface Props {
   children: React.ReactNode;
+  /** Where the cloud drifts. Defaults to 'bottom' (original behaviour). */
+  cloudPosition?: 'top' | 'bottom';
 }
 
-export default function SkyBackground({ children }: Props) {
+export default function SkyBackground({ children, cloudPosition = 'bottom' }: Props) {
   const cloudX = useSharedValue(0);
 
   useEffect(() => {
@@ -52,6 +54,10 @@ export default function SkyBackground({ children }: Props) {
     transform: [{ translateX: cloudX.value }],
   }));
 
+  const cloudPositionStyle = cloudPosition === 'top'
+    ? { top: -CLOUD_BLEED }
+    : { bottom: -CLOUD_BLEED };
+
   return (
     <LinearGradient
       colors={Colors.gradient.clearSky.colors}
@@ -61,7 +67,7 @@ export default function SkyBackground({ children }: Props) {
       <View style={styles.container}>
         <Animated.Image
           source={require('@/assets/images/cloud.png')}
-          style={[styles.cloud, cloudStyle]}
+          style={[styles.cloud, cloudPositionStyle, cloudStyle]}
           resizeMode="cover"
           pointerEvents="none"
         />
@@ -81,7 +87,6 @@ const styles = StyleSheet.create({
   },
   cloud: {
     position: 'absolute',
-    bottom: -CLOUD_BLEED,
     left: CLOUD_NATURAL_LEFT,
     width: CLOUD_WIDTH,
     height: CLOUD_HEIGHT,

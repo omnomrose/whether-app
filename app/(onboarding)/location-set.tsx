@@ -128,7 +128,7 @@ export default function LocationSetScreen() {
 
   return (
     <View style={s.root}>
-      <SkyBackground>
+      <SkyBackground cloudPosition="top">
 
         {/* ── Top bar ───────────────────────────────────────────────── */}
         <View style={[s.topBar, { top: insets.top + 8 }]}>
@@ -209,14 +209,28 @@ export default function LocationSetScreen() {
           {weather && !loading && (
             <>
               <BlurView
-                intensity={20}
+                intensity={80}
                 tint="light"
                 style={s.glassCard}
               >
-                {/* Glass rim — 1px highlight simulating a frosted edge */}
+                {/* Glass rim — solid white 1.5px line at the very top, simulates light hitting the edge */}
                 <View style={s.glassRim} pointerEvents="none" />
 
-                <View style={s.cardInner}>
+                {/* Gloss gradient — bright specular at top fading to transparent, the core of the glassy look */}
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.65)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={s.glossShine}
+                  pointerEvents="none"
+                />
+
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.68)', 'rgba(255,255,255,0.36)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={s.cardInner}
+                >
 
                   {/* Left — IT'S CURRENTLY */}
                   <View style={s.weatherLeft}>
@@ -258,7 +272,7 @@ export default function LocationSetScreen() {
                     </Text>
                   </View>
 
-                </View>
+                </LinearGradient>
               </BlurView>
 
               {/* ── Hourly scroll ──────────────────────────────────────── */}
@@ -387,28 +401,42 @@ const s = StyleSheet.create({
 
   // ── Glass weather card ────────────────────────────────────────────────────
   // Figma: glass-bg effect (type GLASS, radius 12), border surface-100, radius 20
+  // Gloss recipe: intensity-80 blur + glossShine gradient + bright rim + white-gradient inner.
   glassCard: {
     borderRadius:  20,
     overflow:      'hidden',
     marginBottom:  16,
-    // Outer border acts as the "glass rim" that catches light
+    // Bright border — crisp specular edge around the whole card
     borderWidth:   1,
-    borderColor:   'rgba(255,255,255,0.55)',
+    borderColor:   'rgba(255,255,255,0.85)',
+    // Soft depth shadow
+    shadowColor:    '#000',
+    shadowOffset:   { width: 0, height: 4 },
+    shadowOpacity:  0.10,
+    shadowRadius:   16,
+    elevation:      6,
   },
-  // Extra 1px top highlight inside the card (light refraction line)
+  // Solid white 1.5px line — sharpest light catch at the very top edge
   glassRim: {
     position:        'absolute',
     top:             0, left: 0, right: 0,
-    height:          1,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    zIndex:          1,
+    height:          1.5,
+    backgroundColor: 'rgba(255,255,255,1.0)',
+    zIndex:          2,
+  },
+  // Full-card specular shine: bright at top, invisible at bottom (classic gloss)
+  glossShine: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 64,
+    zIndex: 1,
   },
   cardInner: {
-    flexDirection:     'row',
-    padding:           20,
-    gap:               16,
-    // Semi-transparent white tint on top of the blur — thickens the glass feel
-    backgroundColor:   'rgba(245,244,244,0.25)',
+    flexDirection: 'row',
+    padding:       20,
+    gap:           16,
+    zIndex:        1,
+    // backgroundColor intentionally absent — LinearGradient handles the tint
   },
 
   // Left column

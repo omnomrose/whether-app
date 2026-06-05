@@ -459,11 +459,19 @@ export default function LocationScreen() {
 
       {/* ── Morphing Search Container ─────────────────────────── */}
       <Animated.View style={[s.card, cardStyle]}>
-        {/* ── Pure-RN glass layers (no native blur needed) ─────────────────── */}
-        {/* Base fill: high-opacity warm white — map peeks through very subtly  */}
+        {/* ── Pure-RN glass layers (no native blur — BlurView can't blur WebView) */}
+        {/* 1. Base fill — semi-transparent warm white lets the map show through */}
         <View style={[StyleSheet.absoluteFill, s.glassBase]} />
-        {/* Top-edge sheen: 1 px highlight that mimics glass refraction          */}
-        <View style={s.glassSheen} />
+        {/* 2. Specular shine — bright at top, fades to transparent (classic gloss) */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={s.glossShine}
+          pointerEvents="none"
+        />
+        {/* 3. Rim — 1.5 px solid white line catches light at the very top edge  */}
+        <View style={s.glassRim} pointerEvents="none" />
 
         <View style={s.inner}>
 
@@ -603,32 +611,43 @@ const s = StyleSheet.create({
     left:         0,
     right:        0,
     borderRadius: 16,
-    // Outer rim: white-ish edge catches light like real glass
+    // Bright border — crisp specular edge, matches weather card
     borderWidth:  StyleSheet.hairlineWidth,
-    borderColor:  'rgba(255,255,255,0.75)',
+    borderColor:  'rgba(255,255,255,0.88)',
     overflow:     'hidden',
     zIndex:       20,
-    // Soft lift shadow — replaces the depth real blur adds
+    // Soft lift shadow
     shadowColor:     '#1d1d1d',
     shadowOffset:    { width: 0, height: -3 },
     shadowOpacity:   0.07,
     shadowRadius:    18,
     elevation:       10,
   },
-  // Base fill: 94 % opacity warm white lets the map show through very faintly.
-  // Higher than Figma's 50 % because we have no actual blur to diffuse the bg.
+  // Base fill: reduced to 0.82 so the map bleeds through — makes the card
+  // feel genuinely glassy rather than a painted panel.
+  // (Kept above 0.80 to preserve WCAG AA contrast for surface[150] text.)
   glassBase: {
-    backgroundColor: 'rgba(247,246,245,0.94)',
+    backgroundColor: 'rgba(247,246,245,0.82)',
     borderRadius:    16,
   },
-  // 1 px top highlight — the refraction line you see on real glass/frosted panels
-  glassSheen: {
+  // Specular shine — bright white gradient covering top 64 px of the card
+  glossShine: {
+    position: 'absolute',
+    top:      0,
+    left:     0,
+    right:    0,
+    height:   64,
+    zIndex:   1,
+  },
+  // 1.5 px solid white rim — sharpest light catch at the very top edge
+  glassRim: {
     position:        'absolute',
     top:             0,
     left:            0,
     right:           0,
-    height:          1,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    height:          1.5,
+    backgroundColor: 'rgba(255,255,255,1.0)',
+    zIndex:          2,
   },
   // Inner content — Figma padding: px-24, py-12 (idle) / p-24 (focused)
   inner: {

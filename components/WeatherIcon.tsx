@@ -1,46 +1,43 @@
 /**
  * WeatherIcon
  *
- * Maps an OpenWeatherMap condition code to the correct Figma-exported asset.
+ * Maps a WMO weather code (Open-Meteo) to the correct Figma-exported asset.
  * Three icon types from Figma (node 308:26573 "current hourly weather scroll"):
- *   • sunny      — code 800 (clear)               → sunny.png (30×30 in 1x)
- *   • cloudy     — codes 801-804, 700-799          → cloudy.png (53×30 in 1x, aspect 73:41)
- *   • rain-cloud — codes 200-599 (rain/storm/drizzle) → cloudy.png + rain-drops.png overlay
- *   • snow       — codes 600-699                   → cloudy.png (no dedicated snow asset yet)
+ *   • sunny      — WMO 0–1 (clear / mainly clear)               → sunny.png (30×30 in 1x)
+ *   • cloudy     — WMO 2–3, 45–48, 71–77, 85–86 (cloud/fog/snow) → cloudy.png (53×30 in 1x, aspect 73:41)
+ *   • rain-cloud — WMO 51–65, 80–82, 95–99 (rain/showers/storm) → raincloud.png (34×30 in 1x)
  *
  * All assets are local requires — no remote URLs.
  */
 
-import { View, Image, StyleSheet } from 'react-native';
+import { Image } from 'react-native';
 
 // ─── Local asset map (exported, not Figma CDN links) ─────────────────────────
 export const WeatherAssets = {
-  sunny:     require('@/assets/images/weather/sunny.png'),
-  cloudy:    require('@/assets/images/weather/cloudy.png'),
-  rainDrops: require('@/assets/images/weather/rain-drops.png'),
+  sunny:      require('@/assets/images/weather/sunny.png'),
+  cloudy:     require('@/assets/images/weather/cloudy.png'),
+  raincloud:  require('@/assets/images/weather/raincloud.png'),
 } as const;
 
 // ─── Condition code → icon type ───────────────────────────────────────────────
 export type WeatherIconType = 'sunny' | 'cloudy' | 'rain';
 
 export function conditionToIconType(code: number): WeatherIconType {
-  if (code === 800)                    return 'sunny';
-  if (code >= 200 && code < 600)       return 'rain';   // thunderstorm, drizzle, rain
-  return 'cloudy';                                       // clouds, atmosphere, snow → cloudy
+  // WMO codes — https://open-meteo.com/en/docs#weathervariables
+  if (code <= 1)                                 return 'sunny';  // 0 clear, 1 mainly clear
+  if (code >= 51 && code <= 65)                  return 'rain';   // drizzle + rain
+  if (code >= 80 && code <= 82)                  return 'rain';   // rain showers
+  if (code === 95 || code === 96 || code === 99) return 'rain';   // thunderstorm
+  return 'cloudy'; // 2–3 partly/overcast, 45–48 fog, 71–77 snow, 85–86 snow showers
 }
 
 // ─── Sizes (matching Figma 1x spec, React Native scales for device density) ──
-const SUNNY_SIZE  = 30;                         // 30×30 circle
-const CLOUDY_W    = 53;                         // 53px wide, aspect 73:41
+const SUNNY_SIZE  = 30;                          // 30×30 circle
+const CLOUDY_W    = 53;                          // 53px wide, aspect 73:41
 const CLOUDY_H    = Math.round(53 * (41 / 73)); // = 30px
-
-// The rain composite stacks rain-drops below the cloud, both centred horizontally.
-// Figma: cloud h=18.9, rain-drops h=16.3, cloud y=0, rain y=13.7 (partial overlap)
-const RAIN_CLOUD_W = 34;
-const RAIN_CLOUD_H = 19;
-const RAIN_DROP_W  = 27;
-const RAIN_DROP_H  = 16;
-const RAIN_DROP_OFFSET_Y = 14; // how far down rain drops sit relative to cloud top
+// raincloud.png is 134×120px — displayed at proportional height 30: width = 30*(134/120) ≈ 34
+const RAINCLOUD_W = 34;
+const RAINCLOUD_H = 30;
 
 interface Props {
   conditionCode: number;
@@ -63,36 +60,12 @@ export default function WeatherIcon({ conditionCode, scale = 1 }: Props) {
   }
 
   if (type === 'rain') {
-    // Composite: cloud sits on top, rain drops partially overlap underneath
-    const totalH = (RAIN_DROP_OFFSET_Y + RAIN_DROP_H) * s;
     return (
-      <View style={{ width: RAIN_CLOUD_W * s, height: totalH }}>
-        {/* Cloud layer */}
-        <Image
-          source={WeatherAssets.cloudy}
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              width:  RAIN_CLOUD_W * s,
-              height: RAIN_CLOUD_H * s,
-              top: 0,
-            },
-          ]}
-          resizeMode="contain"
-        />
-        {/* Rain-drop layer — offset down so they peek below the cloud */}
-        <Image
-          source={WeatherAssets.rainDrops}
-          style={{
-            position: 'absolute',
-            top:   RAIN_DROP_OFFSET_Y * s,
-            left:  ((RAIN_CLOUD_W - RAIN_DROP_W) / 2) * s,
-            width:  RAIN_DROP_W * s,
-            height: RAIN_DROP_H * s,
-          }}
-          resizeMode="contain"
-        />
-      </View>
+      <Image
+        source={WeatherAssets.raincloud}
+        style={{ width: RAINCLOUD_W * s, height: RAINCLOUD_H * s }}
+        resizeMode="contain"
+      />
     );
   }
 

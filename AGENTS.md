@@ -39,7 +39,7 @@ People who have a hard time deciding what to wear for the day. This is meant for
 - Zustand — state management (weatherStore, closetStore, outfitStore)
 - Supabase — database + authentication + image storage
 - PhotoRoom API — AI background removal (sandbox = free + watermarked for dev; swap to production key for release). Fallback: Rembg (open source)
-- OpenWeatherMap — weather temperature + feels-like data (free tier, non-commercial)
+- Open-Meteo — weather temperature + feels-like + wind data (free, no API key required — https://open-meteo.com)
 - Claude API (claude-sonnet-4-6) — outfit recommendations + clothing auto-tagging via vision
 - Expo Camera + Expo Image Picker — native camera access for closet scanning
 
@@ -67,7 +67,7 @@ store/
 
 lib/
   supabase.ts              # Supabase client
-  weather.ts               # OpenWeatherMap fetch helpers
+  weather.ts               # Open-Meteo fetch helpers (geocode + current + hourly)
   photoroom.ts             # Background removal API
   claude.ts                # Clothing tagging + outfit suggestion prompts
 
@@ -83,7 +83,6 @@ assets/                    # Icons, images, splash
 See `.env.example` for all required keys:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- `EXPO_PUBLIC_OPENWEATHER_API_KEY`
 - `EXPO_PUBLIC_PHOTOROOM_API_KEY`
 - `EXPO_PUBLIC_CLAUDE_API_KEY`
 
