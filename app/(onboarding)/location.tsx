@@ -56,12 +56,11 @@ const THUMB_H         = 35;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Morph animation configs ──────────────────────────────────────────────────
-// Spring on `top` → slightly bouncy entrance/exit that feels physical.
-// easeInOut cubic on `height` → smooth reveal with no overshoot (content never
-// clips awkwardly during the size change).
+// Both position and height now use springs so the whole card grows as one
+// fluid, bouncy unit — matching the closet tutorial card motion language.
 const SPRING_EXPAND   = { damping: 18, stiffness: 180, mass: 1 }; // bouncy open
 const SPRING_COLLAPSE = { damping: 26, stiffness: 220, mass: 1 }; // snappy close
-const HEIGHT_TIMING   = { duration: 380, easing: Easing.inOut(Easing.cubic) };
+const HEIGHT_SPRING   = { damping: 22, stiffness: 200, mass: 0.9 }; // height grow
 // Keyboard-driven repositions stay timing-based to match iOS keyboard spring.
 const KB_TIMING       = { duration: 250, easing: Easing.out(Easing.ease) };
 const KB_RESTORE      = { duration: 400, easing: Easing.inOut(Easing.cubic) };
@@ -250,7 +249,7 @@ export default function LocationScreen() {
 
   const webRef       = useRef<WebView>(null);
   const inputRef     = useRef<TextInput>(null);
-  const debounceRef  = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dismissingRef = useRef(false);
   const searchingRef  = useRef(false);
 
@@ -326,12 +325,12 @@ export default function LocationScreen() {
   // height → easeInOut cubic (smooth reveal, no awkward content clipping)
   const expandCard = useCallback(() => {
     cardTop.value = withSpring(focusTop, SPRING_EXPAND);
-    cardH.value   = withTiming(focusH,   HEIGHT_TIMING);
+    cardH.value   = withSpring(focusH,   HEIGHT_SPRING);
   }, [focusTop, focusH]);
 
   const collapseCard = useCallback(() => {
     cardTop.value = withSpring(idleTop, SPRING_COLLAPSE);
-    cardH.value   = withTiming(idleH,   HEIGHT_TIMING);
+    cardH.value   = withSpring(idleH,   HEIGHT_SPRING);
   }, [idleTop, idleH]);
 
   const handleFocus = () => {
@@ -350,7 +349,7 @@ export default function LocationScreen() {
       setResults([]);
       setScrollY(0);
       dismissingRef.current = false;
-    }, HEIGHT_TIMING.duration + 80);
+    }, 460); // ~HEIGHT_SPRING settle time
   }, [collapseCard]);
 
   // ── Autocomplete ─────────────────────────────────────────────────────────
@@ -460,8 +459,14 @@ export default function LocationScreen() {
       {/* ── Morphing Search Container ─────────────────────────── */}
       <Animated.View style={[s.card, cardStyle]}>
         {/* ── Pure-RN glass layers (no native blur — BlurView can't blur WebView) */}
-        {/* 1. Base fill — semi-transparent warm white lets the map show through */}
-        <View style={[StyleSheet.absoluteFill, s.glassBase]} />
+        {/* 1. glass-linear — surface-100 solid at bottom, transparent at top     */}
+        {/*    Same gradient recipe as ClosetTutorialCard for consistent glass fx  */}
+        <LinearGradient
+          colors={['#f5f4f4', 'rgba(245,244,244,0)']}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 0, y: 0 }}
+          style={[StyleSheet.absoluteFill, s.glassBase]}
+        />
         {/* 2. Specular shine — bright at top, fades to transparent (classic gloss) */}
         <LinearGradient
           colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']}
@@ -623,12 +628,10 @@ const s = StyleSheet.create({
     shadowRadius:    18,
     elevation:       10,
   },
-  // Base fill: reduced to 0.82 so the map bleeds through — makes the card
-  // feel genuinely glassy rather than a painted panel.
-  // (Kept above 0.80 to preserve WCAG AA contrast for surface[150] text.)
+  // glass-linear base — gradient handled by LinearGradient in JSX.
+  // borderRadius clips the gradient to the card shape.
   glassBase: {
-    backgroundColor: 'rgba(247,246,245,0.82)',
-    borderRadius:    16,
+    borderRadius: 16,
   },
   // Specular shine — bright white gradient covering top 64 px of the card
   glossShine: {

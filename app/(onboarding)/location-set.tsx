@@ -241,7 +241,7 @@ export default function LocationSetScreen() {
                     });
                   }}
                 >
-                  <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/closet')} hitSlop={4}>
+                  <Pressable style={s.iconBtn} onPress={() => router.push('/(onboarding)/closet-setup')} hitSlop={4}>
                     <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
                   </Pressable>
                 </View>
@@ -397,13 +397,14 @@ export default function LocationSetScreen() {
           />
           <Pressable
             style={s.iconBtn}
-            onPress={() => router.replace('/(tabs)/closet')}
+            onPress={() => router.push('/(onboarding)/closet-setup')}
             hitSlop={4}
           >
             <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
           </Pressable>
         </Animated.View>
       )}
+
     </View>
   );
 }
