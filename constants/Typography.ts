@@ -6,10 +6,11 @@
 import { TextStyle } from 'react-native';
 
 export const FontFamily = {
-  serif: 'HedvigLettersSerif_400Regular',
-  sans: 'PublicSans_400Regular',
+  serif:      'HedvigLettersSerif_400Regular',
+  sans:       'PublicSans_400Regular',
   sansMedium: 'PublicSans_500Medium',
-  sansBold: 'PublicSans_700Bold',
+  sansBold:   'PublicSans_700Bold',
+  dmSans:     'DMSans_400Regular',  // large numeric displays (weather temp)
 } as const;
 
 export const Typography = {

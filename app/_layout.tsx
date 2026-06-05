@@ -16,6 +16,9 @@ export default function RootLayout() {
       "https://fonts.gstatic.com/s/publicsans/v21/ijwGs572Xtc6ZYQws9YVwllKVG8qX1oyOymuJJm5ww.ttf",
     PublicSans_700Bold:
       "https://fonts.gstatic.com/s/publicsans/v21/ijwGs572Xtc6ZYQws9YVwllKVG8qX1oyOymu8Z65ww.ttf",
+    // DM Sans — used for the large temperature display (Figma: DM_Sans:Regular, 70px)
+    DMSans_400Regular:
+      "https://fonts.gstatic.com/s/dmsans/v17/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAopxhTg.ttf",
   });
 
   useEffect(() => {

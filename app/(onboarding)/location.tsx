@@ -41,6 +41,7 @@ import { router } from 'expo-router';
 import * as ExpoLocation from 'expo-location';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
+import { useWeatherStore } from '@/store/weatherStore';
 
 // ─── Figma constants (frame 393 × 852) ───────────────────────────────────────
 const FIGMA_H         = 852;
@@ -253,6 +254,8 @@ export default function LocationScreen() {
   const dismissingRef = useRef(false);
   const searchingRef  = useRef(false);
 
+  const { setLocation, setDisplayLocation } = useWeatherStore();
+
   const insets              = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
 
@@ -363,10 +366,22 @@ export default function LocationScreen() {
   };
 
   const handleSelect = (result: GeoResult) => {
+    const label = buildLabel(result); // "VANCOUVER, BRITISH COLUMBIA"
+    // Prefer the specific city/town name for the weather API query
+    const cityForApi =
+      result.address?.city ||
+      result.address?.town ||
+      result.address?.municipality ||
+      result.display_name.split(',')[0];
+
     flyTo(parseFloat(result.lat), parseFloat(result.lon));
-    setQuery(buildLabel(result).split(',')[0]);
+    setQuery(label.split(',')[0]);
+    setLocation(cityForApi);
+    setDisplayLocation(label);
     Keyboard.dismiss();
     dismissSearch();
+    // Wait for the collapse animation to start before pushing the next screen
+    setTimeout(() => router.push('/(onboarding)/location-set'), 500);
   };
 
   const handleSubmit = async () => {
@@ -385,11 +400,14 @@ export default function LocationScreen() {
     setLoading(true);
     Keyboard.dismiss();
     dismissSearch();
-    const pos  = await ExpoLocation.getCurrentPositionAsync({});
+    const pos      = await ExpoLocation.getCurrentPositionAsync({});
     flyTo(pos.coords.latitude, pos.coords.longitude, 13);
-    const name = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-    setQuery(name);
+    const cityName = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+    setQuery(cityName);
+    setLocation(cityName);
+    setDisplayLocation(cityName.toUpperCase());
     setLoading(false);
+    router.push('/(onboarding)/location-set');
   };
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {

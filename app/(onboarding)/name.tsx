@@ -26,6 +26,7 @@ import Animated, {
 import SkyBackground from '@/components/SkyBackground';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
+import { useWeatherStore } from '@/store/weatherStore';
 
 const NAMETAG_IMAGE = require('@/assets/images/nametag.png');
 
@@ -42,6 +43,7 @@ export default function NameScreen() {
   const [name, setName] = useState('');
   const inputRef = useRef<TextInput>(null);
   const { height } = useWindowDimensions();
+  const { setUserName } = useWeatherStore();
 
   // Scale the nametag position to the actual device height
   const nametagTop = NAMETAG_TOP * (height / FRAME_H);
@@ -57,6 +59,7 @@ export default function NameScreen() {
 
   /** Dismiss keyboard → fade UI to 0 → navigate */
   const fadeAndGo = (onDone: () => void) => {
+    if (name.trim()) setUserName(name.trim());
     Keyboard.dismiss();
     uiOpacity.value = withTiming(0, { duration: 420 }, (finished) => {
       'worklet';
