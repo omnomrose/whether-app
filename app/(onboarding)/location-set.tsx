@@ -8,10 +8,13 @@
 //  • "IT FEELS" box: glass card with sky-gradient placeholder (stock video TBD)
 //  • Feels-like caption: short phrase from feelsLike + windSpeed
 //  • "[Name]" from onboarding name step (weatherStore.userName)
-//  • Glass effect (expo-blur BlurView, intensity 20, tint "light") on weather card
+//  • Glass effect (expo-blur BlurView, intensity 80, tint "light") on weather card
 //  • Hourly scroll: all available 3-hour forecast slots, Figma-exported icons
+//  • Tutorial overlay (Figma 308:26722 + 308:26781):
+//      – After 50 s idle → fade in dim overlay + hint text over 20 s
+//      – After fade completes → closet button pulses to draw attention
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,8 +23,14 @@ import {
   StyleSheet,
   ActivityIndicator,
   useWindowDimensions,
-  Image,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -119,8 +128,49 @@ export default function LocationSetScreen() {
     ? `${firstName}, you'd look great\nin this`
     : `You'd look great\nin this`;
 
-  const locationPillTop = scaleY(86, screenH);
-  const headingTop      = scaleY(154, screenH);
+  const locationPillTop  = scaleY(86,  screenH);
+  const headingTop       = scaleY(154, screenH);
+  // Figma 308:26779 — hint text sits at y:337 on the 852 frame
+  const tutorialTextTop  = scaleY(337, screenH);
+
+  // ── Tutorial fade-in (Figma 308:26722 → 308:26781) ────────────────────────
+  // After 5 s idle the dark overlay + hint text fade in over 3 s.
+  // Once the fade completes the closet button starts a gentle scale pulse.
+  const tutorialOpacity      = useSharedValue(0);
+  const closetScale          = useSharedValue(1);
+  // Ref + state for floating closet button position
+  const closetPlaceholderRef = useRef<View>(null);
+  const [closetPos, setClosetPos] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const tid = setTimeout(() => {
+      tutorialOpacity.value = withTiming(1, { duration: 3_000 }, (finished) => {
+        'worklet';
+        if (finished) {
+          closetScale.value = withRepeat(
+            withTiming(1.07, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            true,
+          );
+        }
+      });
+    }, 5_000);
+    return () => clearTimeout(tid);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const tutorialFadeStyle  = useAnimatedStyle(() => ({ opacity: tutorialOpacity.value }));
+  const closetScaleStyle   = useAnimatedStyle(() => ({
+    transform: [{ scale: closetScale.value }],
+  }));
+  // White glow ring around the closet button — appears as tutorial fades in
+  const closetRingStyle    = useAnimatedStyle(() => ({
+    opacity: tutorialOpacity.value,
+  }));
+  // In-panel placeholder fades OUT as the floating button fades in
+  const closetOriginalStyle = useAnimatedStyle(() => ({
+    opacity: 1 - tutorialOpacity.value,
+  }));
 
   const locationLabel = displayLocation
     ? displayLocation.split(', ').slice(0, 2).join(', ')
@@ -180,9 +230,22 @@ export default function LocationSetScreen() {
               <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/outfit')} hitSlop={4}>
                 <Ionicons name="body-outline" size={19} color={Colors.surface[200]} />
               </Pressable>
-              <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/closet')} hitSlop={4}>
-                <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
-              </Pressable>
+              {/* Closet btn placeholder — fades out as tutorial fades in.        */}
+              {/* A floating copy (zIndex 52, outside SkyBackground) takes over. */}
+              <Animated.View style={closetOriginalStyle}>
+                <View
+                  ref={closetPlaceholderRef}
+                  onLayout={() => {
+                    closetPlaceholderRef.current?.measureInWindow((x, y) => {
+                      setClosetPos({ x, y });
+                    });
+                  }}
+                >
+                  <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/closet')} hitSlop={4}>
+                    <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
+                  </Pressable>
+                </View>
+              </Animated.View>
             </View>
           </View>
 
@@ -294,7 +357,53 @@ export default function LocationSetScreen() {
 
         </LinearGradient>
 
+        {/* ── Tutorial overlay (Figma 308:26722 / 308:26781) ───────────── */}
+        {/* Fades in after 50 s idle, over 20 s.                          */}
+        {/* pointerEvents="none" so all underlying buttons stay tappable. */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, s.tutorialOverlay, tutorialFadeStyle]}
+          pointerEvents="none"
+        />
+
+        {/* Hint text — Figma 308:26779: Public Sans Medium 18px #ebebeb, w:268, top:337 */}
+        <Animated.View
+          style={[s.tutorialTextWrap, { top: tutorialTextTop }, tutorialFadeStyle]}
+          pointerEvents="none"
+        >
+          <Text style={s.tutorialText}>
+            NICE! LET'S GET STARTED BY BUILDING YOUR CLOSET.
+          </Text>
+        </Animated.View>
+
       </SkyBackground>
+
+      {/* ── Floating closet button ────────────────────────────────────── */}
+      {/* Rendered outside SkyBackground (no overflow:hidden clip).       */}
+      {/* Position mirrors the in-panel placeholder via measureInWindow.  */}
+      {/* zIndex 52 > overlay (50) → only this button is above the dim.  */}
+      {closetPos !== null && (
+        <Animated.View
+          style={[
+            s.floatingCloset,
+            { left: closetPos.x, top: closetPos.y },
+            tutorialFadeStyle,
+            closetScaleStyle,
+          ]}
+        >
+          {/* Glow ring */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, s.closetRing, closetRingStyle]}
+            pointerEvents="none"
+          />
+          <Pressable
+            style={s.iconBtn}
+            onPress={() => router.replace('/(tabs)/closet')}
+            hitSlop={4}
+          >
+            <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -491,6 +600,51 @@ const s = StyleSheet.create({
     letterSpacing: -0.15,
     color:         Colors.surface[150],
     textTransform: 'uppercase',
+  },
+
+  // ── Tutorial overlay ─────────────────────────────────────────────────────
+  // Figma 308:26778: full-screen rgba(43,30,30,0.30) dim — surface-200 @ 30 %
+  tutorialOverlay: {
+    backgroundColor: 'rgba(43,30,30,0.30)',
+    zIndex: 50,
+  },
+  // Hint text container — positioned with tutorialTextTop (scaleY from Figma y:337)
+  tutorialTextWrap: {
+    position:   'absolute',
+    left:        0,
+    right:       0,
+    alignItems: 'center',
+    zIndex:      51,
+  },
+  // Figma 308:26779: Public Sans Medium, 18px, #ebebeb, w:268, tracking -0.36
+  tutorialText: {
+    fontFamily:    FontFamily.sansMedium,
+    fontSize:      18,
+    lineHeight:    22,
+    letterSpacing: -0.36,
+    textTransform: 'uppercase',
+    color:         '#ebebeb',
+    textAlign:     'center',
+    width:         268,
+  },
+  // Floating closet button — sibling of SkyBackground, no overflow:hidden clip,
+  // zIndex 52 > overlay (50) so only this element sits above the dim layer.
+  floatingCloset: {
+    position: 'absolute',
+    zIndex:   52,
+  },
+
+  // White glow ring around the closet button (Figma 308:26781)
+  // Opacity is driven by tutorialOpacity (0→1 with the fade)
+  closetRing: {
+    borderRadius:  22,      // iconBtn is 40×40 r:20; ring bleeds 2px outside
+    margin:        -2,
+    borderWidth:   2,
+    borderColor:   'rgba(255,255,255,0.85)',
+    shadowColor:   '#fff',
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius:  8,
   },
 
   // ── Hourly scroll ─────────────────────────────────────────────────────────
