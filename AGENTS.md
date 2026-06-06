@@ -1,6 +1,7 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
+The project runs **Expo SDK 54** (downgraded from 56 for Expo Go compatibility).
+Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
 
 ---
 
@@ -32,13 +33,13 @@ People who have a hard time deciding what to wear for the day. This is meant for
 
 ## TECH STACK
 
-- React Native (Expo v56) — mobile framework, iOS first
+- React Native (Expo SDK 54) — mobile framework, iOS first
 - Expo Router — file-based navigation
 - NativeWind v4 — Tailwind styling for React Native
 - Zustand — state management (weatherStore, closetStore, outfitStore)
 - Supabase — database + authentication + image storage
 - PhotoRoom API — AI background removal (sandbox = free + watermarked for dev; swap to production key for release). Fallback: Rembg (open source)
-- OpenWeatherMap — weather temperature + feels-like data (free tier, non-commercial)
+- Open-Meteo — weather temperature + feels-like + wind data (free, no API key required — https://open-meteo.com)
 - Claude API (claude-sonnet-4-6) — outfit recommendations + clothing auto-tagging via vision
 - Expo Camera + Expo Image Picker — native camera access for closet scanning
 
@@ -66,7 +67,7 @@ store/
 
 lib/
   supabase.ts              # Supabase client
-  weather.ts               # OpenWeatherMap fetch helpers
+  weather.ts               # Open-Meteo fetch helpers (geocode + current + hourly)
   photoroom.ts             # Background removal API
   claude.ts                # Clothing tagging + outfit suggestion prompts
 
@@ -82,7 +83,6 @@ assets/                    # Icons, images, splash
 See `.env.example` for all required keys:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- `EXPO_PUBLIC_OPENWEATHER_API_KEY`
 - `EXPO_PUBLIC_PHOTOROOM_API_KEY`
 - `EXPO_PUBLIC_CLAUDE_API_KEY`
 
@@ -93,6 +93,51 @@ See `.env.example` for all required keys:
 - All env vars use `EXPO_PUBLIC_` prefix (required for Expo to expose to client).
 - Never commit `.env` to git.
 - PhotoRoom sandbox mode is fine for development (watermarked output). Switch to production API key before user-facing release.
+
+## PACKAGE MANAGEMENT — NON-NEGOTIABLE
+
+All packages must be compatible with **Expo SDK 54**. Wrong versions break the build silently or with cryptic errors.
+
+### Pinned versions (must match exactly)
+
+| Package | Required version |
+|---|---|
+| `react-native-reanimated` | `~4.1.1` |
+| `react-native-webview` | `13.15.0` |
+| `react-native-worklets` | `0.5.1` |
+| `react-native-screens` | `~4.16.0` |
+| `react-native-safe-area-context` | `~5.6.0` |
+| `expo-router` | `~6.0.24` |
+| `expo-font` | `~14.0.12` |
+| `expo-camera` | `~17.0.10` |
+| `expo-image` | `~3.0.11` |
+| `expo-image-picker` | `~17.0.11` |
+| `expo-location` | `~19.0.8` |
+| `expo-splash-screen` | `~31.0.13` |
+| `expo-status-bar` | `~3.0.9` |
+| `expo-constants` | `~18.0.13` |
+| `expo-linking` | `~8.0.12` |
+| `@react-native-async-storage/async-storage` | `2.2.0` |
+| `react-native` | `0.81.5` |
+| `react` | `19.1.0` |
+
+### Known version traps
+- **`react-native-reanimated`**: Must be `~4.1.1` AND paired with `react-native-worklets@0.5.1`. Both are required — reanimated 4.x imports worklets as a peer. Installing reanimated without worklets gives `Unable to resolve "react-native-worklets"`. Installing 3.16.x gives `Cannot find module 'react-native-worklets/plugin'`. Neither 3.x version works.
+- **`react-native-worklets`**: Always install alongside reanimated. SDK 54 expects `0.5.1`.
+
+### Install rules
+```bash
+# Always use one of these — never plain npm install
+npx expo install <package>
+npm install <package> --legacy-peer-deps
+```
+
+After any install, check for drift:
+```bash
+npx expo install --check
+# If mismatches found:
+npx expo install --fix --legacy-peer-deps
+```
 
 ## MVP SCOPE
 
