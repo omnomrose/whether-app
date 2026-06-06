@@ -38,6 +38,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import SkyBackground from '@/components/SkyBackground';
 import WeatherIcon from '@/components/WeatherIcon';
+import GlassNavBar from '@/components/GlassNavBar';
 import { Colors } from '@/constants/Colors';
 import { Typography, FontFamily } from '@/constants/Typography';
 import { useWeatherStore, type HourlyItem } from '@/store/weatherStore';
@@ -78,6 +79,15 @@ function HourCell({ item }: { item: HourlyItem }) {
     <View style={s.hourCell}>
       <WeatherIcon conditionCode={item.conditionCode} />
       <Text style={s.hourTime}>{item.time}</Text>
+    </View>
+  );
+}
+
+// Profile picture placeholder — Figma 387:134: 34×34 circle, top-right
+function PfpCircle({ name }: { name: string | null }) {
+  return (
+    <View style={s.pfp}>
+      <Text style={s.pfpInitial}>{name ? name.charAt(0).toUpperCase() : '?'}</Text>
     </View>
   );
 }
@@ -130,6 +140,8 @@ export default function LocationSetScreen() {
 
   const locationPillTop  = scaleY(86,  screenH);
   const headingTop       = scaleY(154, screenH);
+  // PFP — Figma 387:134: top:81 + safe area, right:20
+  const pfpTop           = scaleY(81,  screenH) + insets.top;
   // Figma 308:26779 — hint text sits at y:337 on the 852 frame
   const tutorialTextTop  = scaleY(337, screenH);
 
@@ -206,14 +218,20 @@ export default function LocationSetScreen() {
           </LinearGradient>
         </Pressable>
 
+        {/* ── PFP — top right (Figma 387:134, 34×34) ───────────────── */}
+        <View style={[s.pfpWrap, { top: pfpTop }]}>
+          <PfpCircle name={firstName} />
+        </View>
+
         {/* ── Heading ───────────────────────────────────────────────── */}
         <Text style={[s.heading, { top: headingTop }]}>{heading}</Text>
 
-        {/* ── Bottom panel: fade → glass card → hourly ──────────────── */}
+        {/* ── Bottom panel: fade → glass card ───────────────────────── */}
+        {/* Extra bottom padding reserves space for GlassNavBar           */}
         <LinearGradient
           colors={['rgba(245,244,244,0)', Colors.surface[100], Colors.surface[100]]}
           locations={[0, 0.22, 1]}
-          style={[s.bottomPanel, { paddingBottom: insets.bottom + 16 }]}
+          style={[s.bottomPanel, { paddingBottom: insets.bottom + 76 }]}
         >
 
           {/* ── "I'm dressing for..." row ───────────────────────────── */}
@@ -311,25 +329,21 @@ export default function LocationSetScreen() {
                   {/* Divider */}
                   <View style={s.cardDivider} />
 
-                  {/* Right — IT FEELS */}
+                  {/* Right — IT FEELS + hourly scroll (Figma 308:26719) */}
+                  {/* feelsBox video placeholder replaced by the hourly   */}
+                  {/* scroll per Figma node 308:26540 update.             */}
                   <View style={s.weatherRight}>
                     <Text style={s.weatherLabel}>IT FEELS</Text>
-                    {/* Annotation: "include stock video of current weather (i will provide)" */}
-                    {/* Glass + sky gradient placeholder until stock video is supplied  */}
-                    <View style={s.feelsBox}>
-                      <LinearGradient
-                        colors={Colors.gradient.clearSky.colors}
-                        locations={Colors.gradient.clearSky.locations}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                      />
-                      {/* Current weather icon centred in the feels box */}
-                      <View style={s.feelsIconWrap}>
-                        <WeatherIcon conditionCode={weather.conditionCode} scale={1.3} />
-                      </View>
-                    </View>
-                    {/* Annotation: "write something short according to the weather api" */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={s.miniHourContent}
+                      style={s.miniHourScroll}
+                    >
+                      {weather.hourly.map((item, i) => (
+                        <HourCell key={i} item={item} />
+                      ))}
+                    </ScrollView>
                     <Text style={s.metaText}>
                       {buildFeelsCaption(weather.feelsLike, weather.windSpeed)}
                     </Text>
@@ -338,20 +352,7 @@ export default function LocationSetScreen() {
                 </LinearGradient>
               </BlurView>
 
-              {/* ── Hourly scroll ──────────────────────────────────────── */}
-              {/* Annotation: "scrollable, goes up to 24 hours of the day" */}
-              {weather.hourly.length > 0 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={s.hourlyContent}
-                  style={s.hourlyScroll}
-                >
-                  {weather.hourly.map((item, i) => (
-                    <HourCell key={i} item={item} />
-                  ))}
-                </ScrollView>
-              )}
+              {/* Hourly scroll is now inside the IT FEELS right column */}
             </>
           )}
 
@@ -376,6 +377,9 @@ export default function LocationSetScreen() {
         </Animated.View>
 
       </SkyBackground>
+
+      {/* ── Glass nav bar — zIndex 55, above tutorial overlay (50) ───── */}
+      <GlassNavBar activeTab={2} />
 
       {/* ── Floating closet button ────────────────────────────────────── */}
       {/* Rendered outside SkyBackground (no overflow:hidden clip).       */}
@@ -580,18 +584,36 @@ const s = StyleSheet.create({
 
   // Right column
   weatherRight: { width: 137, gap: 6 },
-  // Annotation: video placeholder — glass tinted box with sky gradient inside
-  feelsBox: {
-    height:          56,
-    borderRadius:    12,
-    overflow:        'hidden',
+
+  // PFP circle — 34×34, top-right of panel, primary-100 fill with white rim
+  pfpWrap: {
+    position: 'absolute',
+    right:    20,
+    zIndex:   10,
+  },
+  pfp: {
+    width:           34,
+    height:          34,
+    borderRadius:    17,
+    backgroundColor: Colors.primary[100],
     alignItems:      'center',
     justifyContent:  'center',
+    borderWidth:     1.5,
+    borderColor:     'rgba(255,255,255,0.70)',
   },
-  feelsIconWrap: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
+  pfpInitial: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize:   14,
+    color:      Colors.surface[200],
+  },
+
+  // Mini hourly scroll inside right column
+  miniHourScroll: {
+    marginHorizontal: -2,
+  },
+  miniHourContent: {
+    gap:             20,
+    paddingVertical: 2,
   },
 
   metaText: {
@@ -648,15 +670,7 @@ const s = StyleSheet.create({
     shadowRadius:  8,
   },
 
-  // ── Hourly scroll ─────────────────────────────────────────────────────────
-  hourlyScroll: {
-    marginHorizontal: -20, // bleed to screen edge
-  },
-  hourlyContent: {
-    gap:               24,
-    paddingHorizontal: 24, // Figma: content at left:44 = panel(20) + inner(24)
-    paddingVertical:   4,
-  },
+  // ── Hourly scroll (shared cell styles) ───────────────────────────────────
   // Each cell — 53px wide (matches Figma), icon above, time below, gap 8
   hourCell: {
     width:      53,

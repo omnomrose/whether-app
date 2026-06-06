@@ -65,7 +65,8 @@ export default function ClosetSetupScreen() {
   }));
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const goNext = () => router.replace('/(tabs)');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const goNext = () => router.push('/(onboarding)/camera-scan' as any);
 
   const handleConfirm = () => {
     // Collapse card before leaving
