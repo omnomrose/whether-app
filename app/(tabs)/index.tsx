@@ -18,6 +18,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import SkyBackground from '@/components/SkyBackground';
+import { supabase } from '@/lib/supabase';
 import WeatherIcon from '@/components/WeatherIcon';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
@@ -124,28 +126,6 @@ export default function HomeScreen() {
     ? displayLocation.split(', ').slice(0, 2).join(', ')
     : location?.toUpperCase() ?? '';
 
-  // ── No location set ───────────────────────────────────────────────────────
-  if (!location) {
-    return (
-      <View style={s.root}>
-        <SkyBackground cloudPosition="top">
-          <View style={s.noLocWrap}>
-            <Text style={s.noLocTitle}>Where are you based?</Text>
-            <Text style={s.noLocBody}>
-              Set your city so whether can pull the weather and suggest outfits.
-            </Text>
-            <Pressable
-              style={s.noLocBtn}
-              onPress={() => router.push('/(onboarding)/location' as any)}
-            >
-              <Text style={s.noLocBtnText}>SET LOCATION</Text>
-            </Pressable>
-          </View>
-        </SkyBackground>
-      </View>
-    );
-  }
-
   return (
     <View style={s.root}>
       <SkyBackground cloudPosition="top">
@@ -168,9 +148,22 @@ export default function HomeScreen() {
         </Pressable>
 
         {/* ── PFP — top right (Figma 387:134, 34×34) ────────────── */}
-        <View style={[s.pfpWrap, { top: pfpTop }]}>
+        <Pressable
+          style={[s.pfpWrap, { top: pfpTop }]}
+          onPress={() =>
+            Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Sign out',
+                style: 'destructive',
+                onPress: () => supabase.auth.signOut(),
+              },
+            ])
+          }
+          hitSlop={8}
+        >
           <PfpCircle name={firstName} />
-        </View>
+        </Pressable>
 
         {/* ── Heading ───────────────────────────────────────────── */}
         <Text style={[s.heading, { top: headingTop }]}>{heading}</Text>
@@ -295,45 +288,6 @@ export default function HomeScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1 },
-
-  // ── No-location prompt ───────────────────────────────────────────────────
-  noLocWrap: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap:            20,
-  },
-  noLocTitle: {
-    fontFamily:    FontFamily.serif,
-    fontSize:      24,
-    lineHeight:    28,
-    letterSpacing: -1.2,
-    color:         Colors.surface[200],
-    textAlign:     'center',
-  },
-  noLocBody: {
-    fontFamily:    FontFamily.sans,
-    fontSize:      14,
-    lineHeight:    20,
-    letterSpacing: -0.28,
-    color:         Colors.surface[150],
-    textAlign:     'center',
-  },
-  noLocBtn: {
-    backgroundColor:   Colors.primary[100],
-    paddingHorizontal: 24,
-    paddingVertical:   10,
-    borderRadius:      50,
-  },
-  noLocBtnText: {
-    fontFamily:    FontFamily.sans,
-    fontSize:      14,
-    lineHeight:    18,
-    letterSpacing: -0.28,
-    textTransform: 'uppercase',
-    color:         Colors.surface[200],
-  },
 
   // ── Location pill ────────────────────────────────────────────────────────
   locationPill: { position: 'absolute', left: 20, zIndex: 10 },

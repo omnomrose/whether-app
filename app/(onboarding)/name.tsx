@@ -27,6 +27,7 @@ import SkyBackground from '@/components/SkyBackground';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { useWeatherStore } from '@/store/weatherStore';
+import { supabase } from '@/lib/supabase';
 
 const NAMETAG_IMAGE = require('@/assets/images/nametag.png');
 
@@ -57,9 +58,17 @@ export default function NameScreen() {
   const goToLocation = () => router.push('/(onboarding)/location');
   const goToTabs = () => router.replace('/(tabs)');
 
-  /** Dismiss keyboard → fade UI to 0 → navigate */
+  /** Dismiss keyboard → persist name → fade UI to 0 → navigate */
   const fadeAndGo = (onDone: () => void) => {
-    if (name.trim()) setUserName(name.trim());
+    const trimmed = name.trim();
+    if (trimmed) {
+      setUserName(trimmed);
+      // Persist to Supabase so returning users skip this screen
+      supabase.auth.updateUser({ data: { name: trimmed } });
+    } else {
+      // Skip path: write a sentinel so we don't re-show onboarding on next login
+      supabase.auth.updateUser({ data: { name: '' } });
+    }
     Keyboard.dismiss();
     uiOpacity.value = withTiming(0, { duration: 420 }, (finished) => {
       'worklet';

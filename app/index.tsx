@@ -1,7 +1,31 @@
-import { Redirect } from "expo-router";
+/**
+ * Entry point — checks Supabase session on mount.
+ * Redirects to /(tabs) if authenticated, /(onboarding)/welcome if not.
+ */
 
-// Entry point — redirect to onboarding or tabs based on auth state
-// TODO: check Supabase session and redirect accordingly
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { Redirect } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import type { Session } from '@supabase/supabase-js';
+
 export default function Index() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+
+  useEffect(() => {
+    // Check for an existing persisted session (e.g. returning user)
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+    });
+  }, []);
+
+  // Still checking — render nothing (splash screen stays visible)
+  if (session === undefined) return <View />;
+
+  if (session) {
+    // Completed onboarding (name set or skipped) → tabs; new user → name screen
+    const completedOnboarding = session.user.user_metadata?.name !== undefined;
+    return <Redirect href={completedOnboarding ? "/(tabs)" : "/(onboarding)/name"} />;
+  }
   return <Redirect href="/(onboarding)/welcome" />;
 }
