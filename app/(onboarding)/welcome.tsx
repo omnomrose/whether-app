@@ -15,6 +15,7 @@ import { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -52,7 +53,10 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const sy = H / D_H;
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [forgotVisible, setForgotVisible] = useState(false);
+  const [forgotEmail, setForgotEmail]     = useState('');
+  const [forgotSending, setForgotSending] = useState(false);
 
   // Convert Figma absolute y → local y relative to safe-area top
   const toY = (figmaY: number) => figmaY * sy - insets.top;
@@ -72,12 +76,30 @@ export default function WelcomeScreen() {
       if (result.type === 'success') {
         const { error: se } = await supabase.auth.exchangeCodeForSession(result.url);
         if (se) throw se;
-        router.replace('/(tabs)');
+        // onAuthStateChange in _layout.tsx handles routing (tabs vs name onboarding)
       }
     } catch (e: any) {
       Alert.alert('Sign in failed', e.message ?? 'Something went wrong.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ── Forgot password ─────────────────────────────────────────────────────
+  async function handleForgotPassword() {
+    const email = forgotEmail.trim();
+    if (!email) return;
+    setForgotSending(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: Linking.createURL('auth/reset'),
+    });
+    setForgotSending(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setForgotVisible(false);
+      setForgotEmail('');
+      Alert.alert('Email sent', 'Check your inbox for a password reset link.');
     }
   }
 
@@ -175,8 +197,48 @@ export default function WelcomeScreen() {
             </Pressable>
 
           </View>
+
+          {/* ── "I FORGOT PASSWORD" — Figma y=776, bottom of screen ───── */}
+          <Pressable onPress={() => setForgotVisible(true)} hitSlop={12}>
+            <Text style={styles.forgotLink}>i forgot password</Text>
+          </Pressable>
+
         </View>
       </View>
+
+      {/* ── Forgot-password overlay ──────────────────────────────────── */}
+      {forgotVisible && (
+        <View style={styles.forgotOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setForgotVisible(false)} />
+          <View style={styles.forgotCard}>
+            <Text style={styles.forgotTitle}>Reset password</Text>
+            <TextInput
+              style={styles.forgotInput}
+              placeholder="your@email.com"
+              placeholderTextColor={Colors.surface[150]}
+              value={forgotEmail}
+              onChangeText={setForgotEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              returnKeyType="send"
+              onSubmitEditing={handleForgotPassword}
+            />
+            <View style={styles.forgotActions}>
+              <Pressable onPress={() => setForgotVisible(false)} hitSlop={8}>
+                <Text style={styles.forgotCancel}>cancel</Text>
+              </Pressable>
+              <Pressable style={styles.forgotSendBtn} onPress={handleForgotPassword}>
+                {forgotSending
+                  ? <ActivityIndicator color={Colors.surface[100]} size="small" />
+                  : <Text style={styles.forgotSendText}>send link</Text>
+                }
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Loading overlay */}
       {loading && (
@@ -323,6 +385,78 @@ const styles = StyleSheet.create({
   },
 
   dimmed: { opacity: 0.7 },
+
+  // ── "i forgot password" — Figma y=776, caption size, surface-100, centred ──
+  forgotLink: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      12,
+    lineHeight:    16,
+    letterSpacing: -0.18,
+    textTransform: 'uppercase',
+    color:         Colors.surface[100],
+    opacity:        0.75,
+  },
+
+  // ── Forgot-password overlay ───────────────────────────────────────────────
+  forgotOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    zIndex:           10,
+    paddingHorizontal: 24,
+  },
+  forgotCard: {
+    backgroundColor: Colors.surface[100],
+    borderRadius:    20,
+    padding:         24,
+    width:           '100%',
+    gap:             16,
+  },
+  forgotTitle: {
+    fontFamily:    FontFamily.serif,
+    fontSize:      20,
+    lineHeight:    24,
+    letterSpacing: -1,
+    color:         Colors.surface[200],
+  },
+  forgotInput: {
+    backgroundColor: 'rgba(43,30,30,0.07)',
+    borderRadius:    12,
+    height:          44,
+    paddingHorizontal: 14,
+    fontFamily:      FontFamily.sans,
+    fontSize:        13,
+    color:           Colors.surface[200],
+  },
+  forgotActions: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'flex-end',
+    gap:             16,
+  },
+  forgotCancel: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      13,
+    color:         Colors.surface[150],
+    textTransform: 'uppercase',
+    letterSpacing: -0.18,
+  },
+  forgotSendBtn: {
+    backgroundColor: Colors.surface[200],
+    borderRadius:    20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    minWidth:         80,
+    alignItems:       'center',
+  },
+  forgotSendText: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      13,
+    color:         Colors.surface[100],
+    textTransform: 'uppercase',
+    letterSpacing: -0.18,
+  },
 
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

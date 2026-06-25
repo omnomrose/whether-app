@@ -39,6 +39,7 @@ import WebView from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ExpoLocation from 'expo-location';
+import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { useWeatherStore } from '@/store/weatherStore';
@@ -449,7 +450,13 @@ export default function LocationScreen() {
       >
         <View style={s.headerRow}>
           <ProgressDots step={2} total={4} />
-          <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={12}>
+          <Pressable
+            onPress={() => {
+              supabase.auth.updateUser({ data: { whether_onboarded: true } });
+              router.replace('/(tabs)');
+            }}
+            hitSlop={12}
+          >
             <Text style={s.skip}>SKIP</Text>
           </Pressable>
         </View>

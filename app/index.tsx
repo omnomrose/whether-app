@@ -23,9 +23,8 @@ export default function Index() {
   if (session === undefined) return <View />;
 
   if (session) {
-    // Completed onboarding (name set or skipped) → tabs; new user → name screen
-    const completedOnboarding = session.user.user_metadata?.name !== undefined;
-    return <Redirect href={completedOnboarding ? "/(tabs)" : "/(onboarding)/name"} />;
+    const completedOnboarding = session.user.user_metadata?.whether_onboarded === true;
+    return <Redirect href={completedOnboarding ? "/(tabs)" : "/(onboarding)/location"} />;
   }
   return <Redirect href="/(onboarding)/welcome" />;
 }

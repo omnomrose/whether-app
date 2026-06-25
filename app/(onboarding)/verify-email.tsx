@@ -101,7 +101,7 @@ export default function VerifyEmailScreen() {
         type: 'signup',
       });
       if (error) throw error;
-      router.replace('/(tabs)');
+      // onAuthStateChange fires SIGNED_IN → routes to /(onboarding)/location or /(tabs)
     } catch (e: any) {
       Alert.alert('Verification failed', e.message ?? 'Invalid code. Try again.');
       setDigits(['', '', '', '', '', '']);
@@ -148,13 +148,15 @@ export default function VerifyEmailScreen() {
           ))}
         </View>
 
-        {/* RESEND CODE — positioned proportionally from Figma y=571 */}
-        <Pressable
-          style={[styles.resendBtn, { marginTop: resendTop - otpTop - otpBoxH }]}
-          onPress={resend}
-        >
-          <Text style={styles.resendText}>resend code</Text>
-        </Pressable>
+        {/* RESEND CODE — Figma y=729, dark pill w=231, radius=20, bg=#2b1e1e */}
+        <View style={styles.resendWrap}>
+          <Pressable
+            style={({ pressed }) => [styles.resendBtn, pressed && { opacity: 0.8 }]}
+            onPress={resend}
+          >
+            <Text style={styles.resendText}>resend code</Text>
+          </Pressable>
+        </View>
 
       </View>
     </AuthBackground>
@@ -252,9 +254,22 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
 
-  // "RESEND CODE" — body-sm (14px) uppercase #f5f4f4
+  // Figma: absolute bottom area, centred
+  resendWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 48,
+  },
+
+  // Figma node 472:35 — bg=#2b1e1e, px=8, py=12, radius=20, w=231
   resendBtn: {
-    alignSelf: 'center',
+    backgroundColor: Colors.surface[200],
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    width: 231,
+    alignItems: 'center',
   },
   resendText: {
     fontFamily: FontFamily.sans,

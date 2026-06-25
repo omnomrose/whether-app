@@ -102,10 +102,11 @@ export default function AuthEmailScreen() {
         });
         if (error) throw error;
         if (data.session) {
-          // Email confirmation disabled — already signed in
-          router.replace('/(tabs)');
+          // Confirmation disabled — session established.
+          // onAuthStateChange in _layout.tsx fires SIGNED_IN and routes to
+          // /(onboarding)/location (new user) or /(tabs) (returning user).
         } else {
-          // Email confirmation required — forward email so verify screen can call verifyOtp
+          // Confirmation required — go to OTP verify screen.
           router.push(`/(onboarding)/verify-email?email=${encodeURIComponent(email.trim())}`);
         }
       } else {
@@ -114,7 +115,7 @@ export default function AuthEmailScreen() {
           password,
         });
         if (error) throw new Error('Invalid email or password. Please try again.');
-        router.replace('/(tabs)');
+        // onAuthStateChange handles routing.
       }
     } catch (e: any) {
       Alert.alert(isSignUp ? 'Sign up failed' : 'Sign in failed', e.message ?? 'Something went wrong.');

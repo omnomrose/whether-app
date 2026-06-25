@@ -36,6 +36,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 import SkyBackground from '@/components/SkyBackground';
 import WeatherIcon from '@/components/WeatherIcon';
 import GlassNavBar from '@/components/GlassNavBar';
@@ -195,7 +196,7 @@ export default function LocationSetScreen() {
         {/* ── Top bar ───────────────────────────────────────────────── */}
         <View style={[s.topBar, { top: insets.top + 8 }]}>
           <ProgressDots step={3} total={4} />
-          <Pressable hitSlop={12} onPress={() => router.replace('/(tabs)')}>
+          <Pressable hitSlop={12} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)'); }}>
             <Text style={s.skip}>SKIP</Text>
           </Pressable>
         </View>
@@ -238,14 +239,14 @@ export default function LocationSetScreen() {
           <View style={s.dressingRow}>
             <Pressable
               style={s.dressingPill}
-              onPress={() => router.push('/(onboarding)/closet-setup')}
+              onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
             >
               <Text style={s.dressingText}>I'M DRESSING FOR...</Text>
               <Ionicons name="chevron-down" size={10} color={Colors.surface[200]} />
             </Pressable>
 
             <View style={s.iconGroup}>
-              <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/outfit')} hitSlop={4}>
+              <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)/outfit'); }} hitSlop={4}>
                 <Ionicons name="body-outline" size={19} color={Colors.surface[200]} />
               </Pressable>
               {/* Closet btn placeholder — fades out as tutorial fades in.        */}
@@ -259,7 +260,7 @@ export default function LocationSetScreen() {
                     });
                   }}
                 >
-                  <Pressable style={s.iconBtn} onPress={() => router.push('/(onboarding)/closet-setup')} hitSlop={4}>
+                  <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }} hitSlop={4}>
                     <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
                   </Pressable>
                 </View>
@@ -401,7 +402,7 @@ export default function LocationSetScreen() {
           />
           <Pressable
             style={s.iconBtn}
-            onPress={() => router.push('/(onboarding)/closet-setup')}
+            onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
             hitSlop={4}
           >
             <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />

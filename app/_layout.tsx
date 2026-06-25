@@ -11,16 +11,11 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    HedvigLettersSerif_400Regular:
-      "https://fonts.gstatic.com/s/hedviglettersserif/v4/OD5puN2I2mekHmyoU1Kj2AXOd5_7v7gIDlX8quj7viQ_N1HixEAZfw.ttf",
-    PublicSans_400Regular:
-      "https://fonts.gstatic.com/s/publicsans/v21/ijwGs572Xtc6ZYQws9YVwllKVG8qX1oyOymuFpm5ww.ttf",
-    PublicSans_500Medium:
-      "https://fonts.gstatic.com/s/publicsans/v21/ijwGs572Xtc6ZYQws9YVwllKVG8qX1oyOymuJJm5ww.ttf",
-    PublicSans_700Bold:
-      "https://fonts.gstatic.com/s/publicsans/v21/ijwGs572Xtc6ZYQws9YVwllKVG8qX1oyOymu8Z65ww.ttf",
-    DMSans_400Regular:
-      "https://fonts.gstatic.com/s/dmsans/v17/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAopxhTg.ttf",
+    HedvigLettersSerif_400Regular: require("@expo-google-fonts/hedvig-letters-serif/400Regular/HedvigLettersSerif_400Regular.ttf"),
+    PublicSans_400Regular: require("@expo-google-fonts/public-sans/400Regular/PublicSans_400Regular.ttf"),
+    PublicSans_500Medium: require("@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf"),
+    PublicSans_700Bold: require("@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf"),
+    DMSans_400Regular: require("@expo-google-fonts/dm-sans/400Regular/DMSans_400Regular.ttf"),
   });
 
   useEffect(() => {
@@ -35,10 +30,10 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (_event === "SIGNED_IN" && session) {
-          // New user (metadata.name undefined) → name onboarding
-          // Returning user (name set or skipped with '') → go straight to tabs
-          const completedOnboarding = session.user.user_metadata?.name !== undefined;
-          router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/name");
+          // whether_onboarded:true = user has set their location at least once
+          // Google users have `name` from OAuth so we can't use that as the flag
+          const completedOnboarding = session.user.user_metadata?.whether_onboarded === true;
+          router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/location");
         } else if (_event === "SIGNED_OUT") {
           router.replace("/(onboarding)/welcome");
         }
@@ -46,13 +41,17 @@ export default function RootLayout() {
     );
 
     // Handle incoming deep links (OAuth callback: whether://auth/callback?code=...)
+    // Only needed for cold-start / Android deep links — foreground OAuth is
+    // handled by openAuthSessionAsync in welcome.tsx.
     const handleDeepLink = async (url: string) => {
-      if (url.includes("auth/callback")) {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(url);
-        if (!error) {
-          const completedOnboarding = data.user?.user_metadata?.name !== undefined;
-          router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/name");
-        }
+      if (!url.includes("auth/callback")) return;
+      // Skip if a session was already established by the foreground OAuth handler
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) return;
+      const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+      if (!error) {
+        const completedOnboarding = data.user?.user_metadata?.whether_onboarded === true;
+        router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/location");
       }
     };
 
