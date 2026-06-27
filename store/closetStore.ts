@@ -5,6 +5,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export type ClothingItem = {
   id: string;
   imageUrl: string;
+  /** Supabase Storage path — present for cloud-synced items, undefined for local-only. */
+  storagePath?: string;
   category: "top" | "bottom" | "shoes" | "accessory" | "outerwear";
   tags: string[];
   createdAt: string;

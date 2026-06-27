@@ -13,7 +13,7 @@
 //   Empty:    centred prompt → routes to closet-setup tutorial
 //   Bottom:   insets.bottom + 76 (GlassNavBar height + gap)
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   ScrollView,
   Image,
   StyleSheet,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,8 @@ import { router } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useClosetStore, type ClothingItem } from '@/store/closetStore';
+import { supabase } from '@/lib/supabase';
+import { fetchClosetItems, deleteClothingItem } from '@/lib/closet';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ScanCategory = 'top' | 'bottom' | 'shoes';
@@ -156,7 +159,39 @@ function CategorySection({
 export default function ClosetScreen() {
   const insets = useSafeAreaInsets();
   const { width: sw } = useWindowDimensions();
-  const { items, removeItem } = useClosetStore();
+  const { items, setItems, removeItem } = useClosetStore();
+
+  // ── Load user's closet from Supabase on mount ──────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user || cancelled) return;
+      try {
+        const cloudItems = await fetchClosetItems(session.user.id);
+        if (!cancelled) setItems(cloudItems);
+      } catch (err) {
+        console.warn('[closet] fetch failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [setItems]);
+
+  // ── Remove: delete from Supabase first, then local store ──────────────────
+  const handleRemove = useCallback(async (id: string) => {
+    const item = items.find((i) => i.id === id);
+    removeItem(id); // optimistic — remove from UI immediately
+    try {
+      await deleteClothingItem(id, item?.storagePath);
+    } catch (err) {
+      // Re-add on failure
+      if (item) {
+        const { setItems: si, items: current } = useClosetStore.getState();
+        si([...current, item]);
+      }
+      Alert.alert('Could not delete', 'Please try again.');
+    }
+  }, [items, removeItem]);
 
   const goToScan = useCallback(() => {
     router.push('/(onboarding)/closet-setup' as any);
@@ -224,7 +259,7 @@ export default function ClosetScreen() {
                 label={label}
                 items={categoryItems}
                 max={max}
-                onRemove={removeItem}
+                onRemove={handleRemove}
                 onAddMore={goToScan}
               />
             );

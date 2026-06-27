@@ -60,11 +60,11 @@ const SHUTTER_OUTER = 72;
 const SHUTTER_INNER = 57;
 const THUMB_SIZE    = 35;
 
-// Camera card geometry from Figma (px in 393×852 frame)
+// Camera card geometry from Figma (px in 393×852 frame, node 392:137)
 const CARD_LEFT   = 20;
 const CARD_TOP    = 124;
 const CARD_W      = 353;
-const CARD_H      = 601;
+const CARD_H      = 616;
 
 // Focus rect corners (Figma absolute → card-relative):
 //   TL: screen(81,218) → card(61, 94)
@@ -76,9 +76,10 @@ const FOCUS_B  = CARD_H - 388;   // = 213 — from bottom of card to BR bracket
 const FOCUS_W  = 253 - FOCUS_L;  // = 192
 const FOCUS_H  = 388 - FOCUS_T;  // = 294
 
-// Hint pill (card-relative, Figma screen: left:51,top:651 → card: left:31,top:527)
+// Hint pill (card-relative, Figma screen: left:51,top:609 → card: left:31,top:485)
+// Node 392:139: screen top:609 − card top:124 = card-relative top:485
 const HINT_L   = 31;
-const HINT_TOP = 527;
+const HINT_TOP = 485;
 const HINT_W   = 292;
 
 // Bottom controls (Figma screen absolute, below card)
@@ -88,13 +89,13 @@ const SHUTTER_TOP  = 752;
 const THUMB_L      = 318;   // left edge of thumbnail stack
 const THUMB_TOP    = 765;
 
-// Zoom levels (Figma 524:181)
+// Zoom levels — Figma 524:181 shows three buttons: 0.5, 1x (active, yellow), 2
 // Expo Camera zoom is 0–1 (0 = minimum/widest, 1 = maximum).
-// Calibrated to device feel: 0.02 = ultra-wide feel (labeled 0.5x),
-// 0.12 = normal feel (labeled 1x, default), 0.35 = zoomed in (labeled 2x).
+// Calibrated to device feel: 0.02 = ultra-wide (0.5x), 0.12 = normal (1x), 0.50 = tele (2x).
 const ZOOM_LEVELS = [
   { label: '0.5', activeLabel: '0.5x', value: 0.02 },
   { label: '1',   activeLabel: '1x',   value: 0.12 },
+  { label: '2',   activeLabel: '2x',   value: 0.50 },
 ] as const;
 const DEFAULT_ZOOM_IDX = 1; // "1x" (value 0.12) on open
 
@@ -256,12 +257,12 @@ export default function CameraScanScreen() {
 
   // ── Zoom carousel row shift ────────────────────────────────────────────────
   // Shift the row so the tapped button always lands at center.
-  // Each step = one button (30px) + one gap (12px) = 42px Figma → sx(42) device px.
-  // 2 buttons: mid-point is between them, so offset = (0.5 - index) * sx(42)
-  // index 0 → +21px (shift right), index 1 → -21px (shift left)
-  const zoomRowX   = useSharedValue((0.5 - DEFAULT_ZOOM_IDX) * 42); // rough init; corrected after layout
+  // Each slot = button(30px) + gap(12px) = 42px Figma → sx(42) device px.
+  // 3 buttons: center index = 1. Offset = (1 - index) * sx(42).
+  // index 0 → +42px (shift right), index 1 → 0 (stay), index 2 → -42px (shift left)
+  const zoomRowX   = useSharedValue((1 - DEFAULT_ZOOM_IDX) * 42); // rough init; corrected after layout
   useEffect(() => {
-    zoomRowX.value = (0.5 - DEFAULT_ZOOM_IDX) * sx(42);
+    zoomRowX.value = (1 - DEFAULT_ZOOM_IDX) * sx(42);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const zoomRowStyle = useAnimatedStyle(() => ({
@@ -274,8 +275,8 @@ export default function CameraScanScreen() {
     const value = ZOOM_LEVELS[index].value;
     zoomRef.current = value;
     setZoom(value);
-    // Spring-slide row so tapped button is centered
-    zoomRowX.value = withTiming((0.5 - index) * sx(42), { duration: 220, easing: Easing.inOut(Easing.ease) });
+    // Spring-slide row so tapped button is centered (3-button formula: 1 - index)
+    zoomRowX.value = withTiming((1 - index) * sx(42), { duration: 220, easing: Easing.inOut(Easing.ease) });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sx]);
 
@@ -434,14 +435,17 @@ export default function CameraScanScreen() {
     // paddingTop: insets.top shifts all content below the notch/dynamic island
     <View style={[s.root, { paddingTop: insets.top }]} {...pinchResponder.panHandlers}>
 
-      {/* ── Prompt text — Figma: left:20, top:68, w:169, surface-100 */}
-      <Text style={[s.prompt, { top: sy(68), left: sx(20), width: sx(169) }]}>
+      {/* ── Prompt text — Figma node 144:100: left:20, top:68, w:169 */}
+      {/* left + width are fixed pt (not scaled) so the line break always  */}
+      {/* falls at "IN / YOUR ROTATION" regardless of screen width.        */}
+      {/* top scales with screen height to stay in the dark header strip.  */}
+      <Text style={[s.prompt, { top: sy(68), left: 20, width: 169 }]}>
         {allCaptured ? 'TAP YOUR PHOTOS TO REVIEW' : currentStep.prompt}
       </Text>
 
-      {/* ── Progress dots — Figma: top:77, right:20 */}
+      {/* ── Progress dots — Figma node 392:142: top:77, right:20 (fixed grid margin) */}
       {!allCaptured && (
-        <View style={[s.dotsRow, { top: sy(77), right: sx(20) }]}>
+        <View style={[s.dotsRow, { top: sy(77), right: 20 }]}>
           {Array.from({ length: totalInCategory }).map((_, i) => {
             const complete = i < indexInCategory;
             const active   = i === indexInCategory;
@@ -672,12 +676,13 @@ const s = StyleSheet.create({
     zIndex:        10,
   },
 
-  // ── Progress dots — three circles, right-aligned
+  // ── Progress dots — three 18×18 circles, right-aligned
+  // Figma node 392:142: w:70, h:18 → 3×18 + 2×8 = 70px ✓
   dotsRow: {
     position:      'absolute',
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           6,
+    gap:           8,
     zIndex:        10,
   },
   dot: {
@@ -742,22 +747,21 @@ const s = StyleSheet.create({
     borderColor:       BRACKET_COLOR,
   },
 
-  // ── Hint pill — surface-100 bg, overlaid on camera card
-  // Figma: px:44, py:8, r:24, surface-100 bg
+  // ── Hint pill — Figma node 392:139, glass-frost effect (radius:100)
+  // Over the dark camera feed the glass appears as a dark frosted overlay.
+  // bg = dark semi-transparent (simulates glass-frost), text = surface-100 (light).
+  // Figma: px:44, py:8, r:24. Caption-2: DM Mono 10px uppercase.
   hintPill: {
     position:          'absolute',
-    backgroundColor:   Colors.surface[100],
+    backgroundColor:   'rgba(43,30,30,0.58)',    // glass-frost over dark camera feed
     borderRadius:      24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 44,                        // Figma: px-[44px]
     paddingVertical:   8,
     alignItems:        'center',
     justifyContent:    'center',
     zIndex:            10,
-    shadowColor:       '#000',
-    shadowOffset:      { width: 0, height: 2 },
-    shadowOpacity:     0.10,
-    shadowRadius:      8,
-    elevation:         4,
+    borderWidth:       StyleSheet.hairlineWidth,
+    borderColor:       'rgba(245,244,244,0.12)',  // subtle frost rim
   },
   hintText: {
     fontFamily:    FontFamily.sans,
@@ -766,7 +770,7 @@ const s = StyleSheet.create({
     letterSpacing: -0.15,
     textTransform: 'uppercase',
     textAlign:     'center',
-    color:         Colors.surface[150],
+    color:         Colors.surface[100],           // #f5f4f4 — light on dark glass
   },
 
   // ── Flash toggle button

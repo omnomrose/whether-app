@@ -29,6 +29,8 @@ import {
   StyleSheet,
   Image,
   TextInput,
+  ActivityIndicator,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,6 +41,8 @@ import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useScanStore, type ScanCategory } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
+import { supabase } from '@/lib/supabase';
+import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
 
 // ─── Figma frame reference ─────────────────────────────────────────────────────
 const FW = 393;
@@ -70,6 +74,7 @@ export default function ClothingDetailScreen() {
   const suggestedTags  = photo ? SUGGESTED_TAGS[photo.category] : [];
   const [selectedTags, setSelectedTags] = useState<string[]>([suggestedTags[0] ?? ''].filter(Boolean));
   const [customInput,  setCustomInput]  = useState('');
+  const [uploading,    setUploading]    = useState(false);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) =>
@@ -94,19 +99,56 @@ export default function ClothingDetailScreen() {
   }, [photo, removeItem, retakePhoto]);
 
   // ── Update closet ──────────────────────────────────────────────────────────
-  const handleUpdateCloset = useCallback(() => {
-    if (!photo) return;
-    const imageUrl = photo.bgRemovedUri ?? photo.rawUri;
-    addItem({
-      id:        photo.id,
-      imageUrl,
-      category:  photo.category,
-      tags:      selectedTags,
-      createdAt: new Date().toISOString(),
-    });
-    confirmToCloset(photo.id);
-    router.back();  // back to photo-confirm
-  }, [photo, selectedTags, addItem, confirmToCloset]);
+  // Uploads the photo to Supabase Storage, inserts a clothing_items row,
+  // then adds the item to the local Zustand store with the public URL + DB id.
+  const handleUpdateCloset = useCallback(async () => {
+    if (!photo || uploading) return;
+
+    const localUri = photo.bgRemovedUri ?? photo.rawUri;
+
+    // Get the current user's id
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      Alert.alert('Not signed in', 'Please sign in to save your closet.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 1. Upload image to Supabase Storage
+      const { publicUrl, storagePath } = await uploadClothingPhoto(
+        localUri,
+        session.user.id,
+      );
+
+      // 2. Insert DB record — returns the Supabase-generated UUID
+      const dbId = await saveClothingItem({
+        userId:      session.user.id,
+        imageUrl:    publicUrl,
+        storagePath,
+        category:    photo.category,
+        tags:        selectedTags,
+      });
+
+      // 3. Add to local store using cloud ID + public URL
+      addItem({
+        id:          dbId,
+        imageUrl:    publicUrl,
+        storagePath,
+        category:    photo.category,
+        tags:        selectedTags,
+        createdAt:   new Date().toISOString(),
+      });
+
+      confirmToCloset(photo.id);
+      router.back(); // back to photo-confirm
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Upload failed', msg);
+    } finally {
+      setUploading(false);
+    }
+  }, [photo, uploading, selectedTags, addItem, confirmToCloset]);
 
   // ── Item label — "TOP#1", "BOTTOM#2" etc. ─────────────────────────────────
   const itemLabel = (() => {
@@ -257,11 +299,16 @@ export default function ClothingDetailScreen() {
 
       {/* ── "UPDATE CLOSET" button (Figma 144:256: top:660, centred, w:211) */}
       <Pressable
-        style={[s.updateBtn, { top: btnTop, left: btnLeft, width: sx(211) }]}
+        style={[s.updateBtn, { top: btnTop, left: btnLeft, width: sx(211) }, uploading && s.updateBtnLoading]}
         onPress={handleUpdateCloset}
+        disabled={uploading}
         accessibilityLabel="Update closet"
       >
-        <Text style={s.updateBtnText}>UPDATE CLOSET</Text>
+        {uploading ? (
+          <ActivityIndicator size="small" color={Colors.surface[100]} />
+        ) : (
+          <Text style={s.updateBtnText}>UPDATE CLOSET</Text>
+        )}
       </Pressable>
 
     </View>
@@ -406,6 +453,7 @@ const s = StyleSheet.create({
     justifyContent:    'center',
     zIndex:            5,
   },
+  updateBtnLoading: { opacity: 0.65 },
   updateBtnText: {
     fontFamily:    FontFamily.sans,
     fontSize:      12,
