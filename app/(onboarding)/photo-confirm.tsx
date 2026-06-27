@@ -1,29 +1,24 @@
-// Figma node 424:176 — "onboard | recent photos"
+// Figma node 424:176 — "onboard | recent photos pop up"
 //
-// Opens when the user taps the thumbnail button in camera-scan (or auto-
-// navigates after all 6 shots are taken).
+// Annotations:
+//   • Header "⌄ RECENT PHOTOS": on click/swipe-down → back to camera
+//   • Carousel: swipe left ↔ right; active item is VISIBLY LARGER than neighbours
+//               (smooth scale + opacity animation driven by scroll position)
+//   • "IS THIS GOOD?" prompt beneath active photo
+//   • RETAKE PHOTO → remove from session, rewind step, back to camera
+//   • YES, ADD TO CLOSET → clothing-detail tagging screen
+//   • Swipe-down anywhere → back to camera
 //
-// Layout: header → full-width swipeable carousel → "IS THIS GOOD?" → buttons
-//
-// Each page = one ScanPhoto from the store.
-// The displayed image is bgRemovedUri (data:image/png;base64,…) while available,
-// falling back to rawUri while PhotoRoom is still processing.
-//
-// Buttons act on the currently-visible photo:
-//   Unconfirmed → RETAKE PHOTO | YES, ADD TO CLOSET
-//   Confirmed   → RETAKE PHOTO | ADDED (greyed)
-//
-// Retake: removes photo from store + rewinds stepIndex → back to camera.
-// Add:    adds to closetStore + marks confirmToCloset → button becomes ADDED.
-// When every photo is confirmed → completed becomes true → navigate to main app.
-// Swipe-down or header tap → back to camera.
+// Carousel dimensions (Figma 393×852):
+//   Active photo:  left:8, top:204, w:390, h:367 (nearly full-width)
+//   Adjacent peek: ~24 px visible on each side, scale 0.92, opacity 0.6
 
 import {
   useState,
   useEffect,
   useRef,
   useCallback,
-  type ComponentRef,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -33,12 +28,14 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
+  Animated,
   useWindowDimensions,
   PanResponder,
-  type ViewToken,
-  type ListRenderItemInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// FlatList must be wrapped so native onScroll events work with useNativeDriver
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<ScanPhoto>);
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '@/constants/Colors';
@@ -47,251 +44,379 @@ import { useScanStore, type ScanPhoto } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
 
 // ─── Figma frame reference (393 × 852) ────────────────────────────────────────
+const FW = 393;
 const FH = 852;
 
+// ─── Carousel item component ───────────────────────────────────────────────────
+// Kept as a separate component so it can compute animated style via useMemo.
+type CarouselItemProps = {
+  item:         ScanPhoto;
+  index:        number;
+  scrollX:      Animated.Value;
+  itemW:        number;
+  itemSpacing:  number;
+  snapInterval: number;
+  photoH:       number;
+};
+
+function CarouselItem({
+  item,
+  index,
+  scrollX,
+  itemW,
+  itemSpacing,
+  snapInterval,
+  photoH,
+}: CarouselItemProps) {
+  // Scale: 1.0 at active position, 0.92 at ±1 position
+  const scale = useMemo(
+    () =>
+      scrollX.interpolate({
+        inputRange:  [
+          (index - 1) * snapInterval,
+          index       * snapInterval,
+          (index + 1) * snapInterval,
+        ],
+        outputRange: [0.92, 1, 0.92],
+        extrapolate: 'clamp',
+      }),
+    [scrollX, index, snapInterval],
+  );
+
+  // Opacity: 1.0 active, 0.55 adjacent
+  const opacity = useMemo(
+    () =>
+      scrollX.interpolate({
+        inputRange:  [
+          (index - 1) * snapInterval,
+          index       * snapInterval,
+          (index + 1) * snapInterval,
+        ],
+        outputRange: [0.55, 1, 0.55],
+        extrapolate: 'clamp',
+      }),
+    [scrollX, index, snapInterval],
+  );
+
+  const uri     = item.bgRemovedUri ?? item.rawUri;
+  const loading = item.isProcessing;
+
+  return (
+    <Animated.View
+      style={[
+        ci.wrap,
+        {
+          width:       itemW,
+          height:      photoH,
+          marginRight: itemSpacing,
+          transform:   [{ scale }],
+          opacity,
+        },
+      ]}
+    >
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="contain"
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, ci.placeholder]} />
+      )}
+
+      {/* Processing overlay */}
+      {loading && (
+        <View style={ci.overlay}>
+          <ActivityIndicator size="small" color={Colors.surface[150]} />
+          <Text style={ci.overlayText}>REMOVING BACKGROUND…</Text>
+        </View>
+      )}
+
+      {/* BG-removal error */}
+      {!loading && item.bgError && (
+        <View style={[ci.overlay, ci.errorOverlay]}>
+          <Ionicons name="warning-outline" size={20} color={Colors.danger[100]} />
+          <Text style={[ci.overlayText, ci.errorText]}>BG REMOVAL FAILED</Text>
+        </View>
+      )}
+
+      {/* Confirmed badge — top-right checkmark */}
+      {item.addedToCloset && !loading && (
+        <View style={ci.confirmedBadge} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={22} color={Colors.surface[200]} />
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+const ci = StyleSheet.create({
+  wrap: {
+    overflow: 'hidden',
+  },
+  placeholder: {
+    backgroundColor: Colors.surface[20],
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(245,244,244,0.82)',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             10,
+  },
+  errorOverlay: {
+    backgroundColor: 'rgba(254,226,226,0.92)',
+  },
+  overlayText: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      10,
+    lineHeight:    14,
+    letterSpacing: -0.15,
+    textTransform: 'uppercase',
+    color:         Colors.surface[150],
+  },
+  errorText: {
+    color: Colors.danger[200],
+  },
+  confirmedBadge: {
+    position:        'absolute',
+    top:             12,
+    right:           12,
+    backgroundColor: 'rgba(245,244,244,0.88)',
+    borderRadius:    50,
+    padding:         4,
+  },
+});
+
+// ─── Screen ────────────────────────────────────────────────────────────────────
 export default function PhotoConfirmScreen() {
   const insets = useSafeAreaInsets();
   const { width: sw, height: sh } = useWindowDimensions();
-  const sy = (y: number) => Math.round((y / FH) * sh);
 
-  // ── Store ──────────────────────────────────────────────────────────────────
-  const {
-    photos,
-    completed,
-    confirmToCloset,
-    retakePhoto,
-  } = useScanStore();
+  const sx = (x: number) => (x / FW) * sw;
+  const sy = (y: number) => (y / FH) * sh;
 
-  const { addItem, removeItem } = useClosetStore();
+  // ── Stores ──────────────────────────────────────────────────────────────────
+  const { photos, completed, retakePhoto } = useScanStore();
+  const { removeItem } = useClosetStore();
 
-  // ── Navigate to main app when all photos are confirmed ─────────────────────
+  // Navigate to main app when all photos confirmed
   useEffect(() => {
-    if (completed) {
-      router.replace('/(tabs)');
-    }
+    if (completed) router.replace('/(tabs)');
   }, [completed]);
 
-  // ── Carousel state ─────────────────────────────────────────────────────────
-  const flatListRef   = useRef<ComponentRef<typeof FlatList<ScanPhoto>>>(null);
-  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, photos.length - 1));
+  // ── Carousel constants (derived from screen width) ─────────────────────────
+  // ITEM_W leaves ~30 px on each side for peek: LIST_PADDING - ITEM_SPACING = 22 px visible
+  const ITEM_W        = sw - sx(60);
+  const ITEM_SPACING  = sx(8);
+  const SNAP_INTERVAL = ITEM_W + ITEM_SPACING;
+  const LIST_PADDING  = (sw - ITEM_W) / 2;   // = sx(30), centers active item
+  const PHOTO_H       = sy(367);
 
-  // Scroll to the last photo when screen opens
-  const scrolledRef = useRef(false);
+  // ── Carousel state ──────────────────────────────────────────────────────────
+  const [activeIndex, setActiveIndex] = useState(() =>
+    Math.max(0, photos.length - 1),
+  );
+  const listRef   = useRef<any>(null);
+  const scrollX   = useRef(new Animated.Value(0)).current;
+  const didScroll = useRef(false);
+
+  // On first open, jump to most-recent photo (no animation — instant)
   useEffect(() => {
-    if (scrolledRef.current || photos.length === 0) return;
-    scrolledRef.current = true;
-    const lastIdx = photos.length - 1;
-    if (lastIdx > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({ index: lastIdx, animated: false });
-      }, 60);
+    if (didScroll.current || photos.length === 0) return;
+    didScroll.current = true;
+    const last = photos.length - 1;
+    setActiveIndex(last);
+    if (last > 0) {
+      setTimeout(
+        () =>
+          listRef.current?.scrollToOffset({
+            offset:   last * SNAP_INTERVAL,
+            animated: false,
+          }),
+        60,
+      );
+      // Pre-warm scrollX so scale is correct before the FlatList scrolls
+      scrollX.setValue(last * SNAP_INTERVAL);
     }
-    setActiveIndex(lastIdx);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos.length]);
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        setActiveIndex(viewableItems[0].index);
-      }
-    }
-  ).current;
+  // Track active index when scroll settles
+  const onMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const idx = Math.round(e.nativeEvent.contentOffset.x / SNAP_INTERVAL);
+      setActiveIndex(Math.max(0, Math.min(photos.length - 1, idx)));
+    },
+    [SNAP_INTERVAL, photos.length],
+  );
 
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
-
-  // ── Swipe-down to go back ──────────────────────────────────────────────────
-  const swipeResponder = useRef(
+  // ── Swipe-down to dismiss ──────────────────────────────────────────────────
+  const swipeDown = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 10 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5,
+        gs.dy > 12 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.6,
       onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 70) router.back();
+        if (gs.dy > 60) router.back();
       },
-    })
+    }),
   ).current;
 
-  // ── Active photo ───────────────────────────────────────────────────────────
-  const activePhoto    = photos[activeIndex] ?? photos[photos.length - 1];
-  const isConfirmed    = activePhoto?.addedToCloset ?? false;
-  const isProcessing   = activePhoto?.isProcessing ?? false;
+  // ── Active photo + derived state ───────────────────────────────────────────
+  const activePhoto = photos[activeIndex] ?? photos[photos.length - 1];
+  const isConfirmed = activePhoto?.addedToCloset ?? false;
 
-  // ── Button handlers ────────────────────────────────────────────────────────
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleRetake = useCallback(() => {
     if (!activePhoto) return;
-    // Remove from closet if already added
-    if (activePhoto.addedToCloset) {
-      removeItem(activePhoto.id);
-    }
+    if (activePhoto.addedToCloset) removeItem(activePhoto.id);
     retakePhoto(activePhoto.id);
-    router.back();   // return to camera so user can reshoot
+    router.back();
   }, [activePhoto, removeItem, retakePhoto]);
 
   const handleAddToCloset = useCallback(() => {
     if (!activePhoto || activePhoto.addedToCloset) return;
-    const imageUrl = activePhoto.bgRemovedUri ?? activePhoto.rawUri;
-    addItem({
-      id:        activePhoto.id,
-      imageUrl,
-      category:  activePhoto.category,
-      tags:      [],
-      createdAt: new Date().toISOString(),
-    });
-    confirmToCloset(activePhoto.id);
-    // If there's a next unconfirmed photo, scroll to it
-    const nextUnconfirmed = photos.findIndex(
-      (p, i) => i > activeIndex && !p.addedToCloset,
-    );
-    if (nextUnconfirmed !== -1) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({ index: nextUnconfirmed, animated: true });
-      }, 120);
-    }
-  }, [activePhoto, activeIndex, photos, addItem, confirmToCloset]);
+    router.push(`/(onboarding)/clothing-detail?photoId=${activePhoto.id}`);
+  }, [activePhoto]);
 
-  // ── Layout anchors ─────────────────────────────────────────────────────────
-  const headerTop   = sy(85) + insets.top;
-  const heroTop     = sy(204);
-  const heroH       = sy(367);
+  // ── renderItem ──────────────────────────────────────────────────────────────
+  const renderItem = useCallback(
+    ({ item, index }: { item: ScanPhoto; index: number }) => (
+      <CarouselItem
+        item={item}
+        index={index}
+        scrollX={scrollX}
+        itemW={ITEM_W}
+        itemSpacing={ITEM_SPACING}
+        snapInterval={SNAP_INTERVAL}
+        photoH={PHOTO_H}
+      />
+    ),
+    // scrollX is a stable ref; ITEM_W/SNAP_INTERVAL/PHOTO_H change only on
+    // screen resize which is not expected in this portrait-locked app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scrollX, ITEM_W, ITEM_SPACING, SNAP_INTERVAL, PHOTO_H],
+  );
+
+  // ── Layout values ───────────────────────────────────────────────────────────
+  const headerTop   = sy(77) + insets.top;
+  const carouselTop = sy(204);
   const questionTop = sy(561);
   const btnTop      = sy(670);
 
-  // ── Carousel render item ───────────────────────────────────────────────────
-  const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<ScanPhoto>) => {
-      const uri      = item.bgRemovedUri ?? item.rawUri;
-      const loading  = item.isProcessing;
-
-      return (
-        <View style={[s.carouselPage, { width: sw }]}>
-          <View style={[s.heroWrap, { height: heroH, width: sw - 16 }]}>
-            {uri ? (
-              <Image
-                source={{ uri }}
-                style={s.heroImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={s.heroPlaceholder} />
-            )}
-
-            {loading && (
-              <View style={s.heroOverlay}>
-                <ActivityIndicator size="small" color={Colors.surface[150]} />
-                <Text style={s.removingText}>REMOVING BACKGROUND…</Text>
-              </View>
-            )}
-
-            {/* API error — show message so we can debug */}
-            {!loading && item.bgError && (
-              <View style={[s.heroOverlay, s.errorOverlay]}>
-                <Ionicons name="warning-outline" size={20} color={Colors.danger[100]} />
-                <Text style={s.errorText}>BG REMOVAL FAILED</Text>
-                <Text style={s.errorDetail} numberOfLines={3}>{item.bgError}</Text>
-              </View>
-            )}
-
-            {item.addedToCloset && (
-              <View style={s.confirmedBadge} pointerEvents="none">
-                <Ionicons name="checkmark-circle" size={22} color={Colors.surface[200]} />
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    },
-    [sw, heroH]
-  );
-
-  // ── Empty state ────────────────────────────────────────────────────────────
+  // ── Empty state ─────────────────────────────────────────────────────────────
   if (photos.length === 0) {
     return (
-      <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[s.root, s.emptyRoot]}>
         <Text style={s.emptyText}>NO PHOTOS YET</Text>
-        <Pressable onPress={() => router.back()} style={s.emptyBtn}>
+        <Pressable style={s.emptyBtn} onPress={() => router.back()}>
           <Text style={s.emptyBtnText}>BACK TO CAMERA</Text>
         </Pressable>
       </View>
     );
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Main ────────────────────────────────────────────────────────────────────
   return (
-    <View style={s.root} {...swipeResponder.panHandlers}>
+    <View style={s.root} {...swipeDown.panHandlers}>
 
-      {/* ── Header: < RECENT PHOTOS ─────────────────────────────────────── */}
+      {/* ── Header: ⌄ RECENT PHOTOS ─────────────────────────────────────────── */}
+      {/* Annotation: on click/swipe down → back to camera */}
       <Pressable
-        style={[s.header, { top: headerTop }]}
+        style={[s.header, { top: headerTop, left: sx(22) }]}
         onPress={() => router.back()}
         accessibilityLabel="Back to camera"
       >
-        <Ionicons name="chevron-back" size={20} color={Colors.surface[200]} />
+        <Ionicons name="chevron-down" size={16} color={Colors.surface[200]} />
         <Text style={s.headerText}>RECENT PHOTOS</Text>
       </Pressable>
 
-      {/* ── Carousel ────────────────────────────────────────────────────── */}
-      <FlatList<ScanPhoto>
-        ref={flatListRef}
-        data={photos}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        onScrollToIndexFailed={() => {}}
-        style={[s.carousel, { top: heroTop, height: heroH }]}
-        bounces={false}
-        decelerationRate="fast"
-      />
+      {/* ── Scale carousel ──────────────────────────────────────────────────── */}
+      {/* Annotation: active item visibly larger; smooth anim as user swipes */}
+      <View style={[s.carouselWrap, { top: carouselTop, height: PHOTO_H }]}>
+        <AnimatedFlatList
+          ref={listRef as any}
+          data={photos}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item: ScanPhoto) => item.id}
+          renderItem={renderItem as any}
+          snapToInterval={SNAP_INTERVAL}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          contentContainerStyle={{ paddingHorizontal: LIST_PADDING }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={onMomentumScrollEnd}
+          bounces={false}
+          onScrollToIndexFailed={() => {}}
+        />
+      </View>
 
-      {/* ── Page dots ─────────────────────────────────────────────────────── */}
+      {/* ── Page dots ───────────────────────────────────────────────────────── */}
       {photos.length > 1 && (
-        <View style={[s.pageDots, { top: heroTop + heroH + 12 }]}>
+        <View style={[s.dots, { top: carouselTop + PHOTO_H + sx(10) }]}>
           {photos.map((p, i) => (
             <View
               key={p.id}
               style={[
-                s.pageDot,
-                i === activeIndex && s.pageDotActive,
-                p.addedToCloset && s.pageDotConfirmed,
+                s.dot,
+                i === activeIndex  && s.dotActive,
+                p.addedToCloset    && s.dotDone,
               ]}
             />
           ))}
         </View>
       )}
 
-      {/* ── "IS THIS GOOD?" ─────────────────────────────────────────────── */}
+      {/* ── "IS THIS GOOD?" (Figma 431:28: top:561, centred, 16/20 px) ──────── */}
       {!isConfirmed && (
         <Text style={[s.question, { top: questionTop }]}>IS THIS GOOD?</Text>
       )}
 
-      {/* ── Action buttons ───────────────────────────────────────────────── */}
+      {/* ── Action buttons (Figma 450:34 / 450:35: top:670) ─────────────────── */}
+      {/* RETAKE: left:21, w:168  |  YES ADD: left:50%+6.5, w:170 */}
       <View style={[s.btnRow, { top: btnTop }]}>
 
-        {/* RETAKE — always available */}
         <Pressable
-          style={s.btn}
+          style={[s.btn, { left: sx(21), width: sx(168) }]}
           onPress={handleRetake}
           accessibilityLabel="Retake photo"
         >
           <Text style={s.btnText}>RETAKE PHOTO</Text>
         </Pressable>
 
-        {/* ADD TO CLOSET / ADDED */}
         {isConfirmed ? (
-          <View style={[s.btn, s.btnAdded]}>
+          <View
+            style={[
+              s.btn,
+              s.btnAdded,
+              { left: sw / 2 + sx(6.5), width: sx(170) },
+            ]}
+          >
             <Ionicons name="checkmark" size={12} color={Colors.surface[150]} />
             <Text style={[s.btnText, s.btnTextMuted]}>ADDED</Text>
           </View>
         ) : (
           <Pressable
-            style={[s.btn, isProcessing && s.btnDisabled]}
+            style={[
+              s.btn,
+              { left: sw / 2 + sx(6.5), width: sx(170) },
+              activePhoto?.isProcessing && s.btnDisabled,
+            ]}
             onPress={handleAddToCloset}
-            disabled={isProcessing}
+            disabled={activePhoto?.isProcessing}
             accessibilityLabel="Add to closet"
           >
-            <Text style={[s.btnText, isProcessing && s.btnTextMuted]}>
+            <Text
+              style={[
+                s.btnText,
+                activePhoto?.isProcessing && s.btnTextMuted,
+              ]}
+            >
               YES, ADD TO CLOSET
             </Text>
           </Pressable>
@@ -309,13 +434,17 @@ const s = StyleSheet.create({
     flex:            1,
     backgroundColor: Colors.surface[100],
   },
+  emptyRoot: {
+    justifyContent: 'center',
+    alignItems:     'center',
+  },
 
+  // ── Header (Figma 453:34) ───────────────────────────────────────────────────
   header: {
     position:      'absolute',
-    left:          22,
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           6,
+    gap:           8,
     zIndex:        20,
   },
   headerText: {
@@ -327,78 +456,15 @@ const s = StyleSheet.create({
     color:         Colors.surface[200],
   },
 
-  carousel: {
+  // ── Carousel container ──────────────────────────────────────────────────────
+  carouselWrap: {
     position: 'absolute',
     left:     0,
     right:    0,
   },
-  carouselPage: {
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
 
-  heroWrap: {
-    overflow: 'hidden',
-    left:     8,
-  },
-  heroImage: {
-    width:  '100%',
-    height: '100%',
-  },
-  heroPlaceholder: {
-    width:           '100%',
-    height:          '100%',
-    backgroundColor: Colors.surface[20],
-    borderRadius:    8,
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(245,244,244,0.80)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             10,
-    borderRadius:    8,
-  },
-  errorOverlay: {
-    backgroundColor: 'rgba(254,226,226,0.92)',
-  },
-  removingText: {
-    fontFamily:    FontFamily.sans,
-    fontSize:      10,
-    lineHeight:    14,
-    letterSpacing: -0.15,
-    textTransform: 'uppercase',
-    color:         Colors.surface[150],
-  },
-  errorText: {
-    fontFamily:    FontFamily.sansMedium,
-    fontSize:      11,
-    lineHeight:    16,
-    letterSpacing: -0.2,
-    textTransform: 'uppercase',
-    color:         Colors.danger[200],
-  },
-  errorDetail: {
-    fontFamily:    FontFamily.sans,
-    fontSize:      10,
-    lineHeight:    14,
-    letterSpacing: -0.1,
-    color:         Colors.danger[100],
-    textAlign:     'center',
-    paddingHorizontal: 16,
-  },
-
-  // Small confirmed checkmark overlay in the top-right of the photo
-  confirmedBadge: {
-    position:        'absolute',
-    top:             10,
-    right:           10,
-    backgroundColor: 'rgba(245,244,244,0.85)',
-    borderRadius:    50,
-    padding:         4,
-  },
-
-  pageDots: {
+  // ── Page dots ───────────────────────────────────────────────────────────────
+  dots: {
     position:       'absolute',
     left:           0,
     right:          0,
@@ -407,19 +473,16 @@ const s = StyleSheet.create({
     gap:            6,
     zIndex:         10,
   },
-  pageDot: {
+  dot: {
     width:           5,
     height:          5,
     borderRadius:    2.5,
     backgroundColor: 'rgba(43,30,30,0.22)',
   },
-  pageDotActive: {
-    backgroundColor: Colors.surface[200],
-  },
-  pageDotConfirmed: {
-    backgroundColor: Colors.surface[30],
-  },
+  dotActive: { backgroundColor: Colors.surface[200] },
+  dotDone:   { backgroundColor: Colors.surface[30] },
 
+  // ── "IS THIS GOOD?" (Figma 431:28) ─────────────────────────────────────────
   question: {
     position:      'absolute',
     left:          0,
@@ -434,16 +497,15 @@ const s = StyleSheet.create({
     zIndex:        10,
   },
 
+  // ── Action buttons (Figma 450:34 / 450:35) ──────────────────────────────────
   btnRow: {
-    position:      'absolute',
-    left:          21,
-    right:         20,
-    flexDirection: 'row',
-    gap:           14,
-    zIndex:        10,
+    position: 'absolute',
+    left:     0,
+    right:    0,
+    zIndex:   10,
   },
   btn: {
-    flex:            1,
+    position:        'absolute',
     borderWidth:     1,
     borderColor:     Colors.surface[200],
     paddingVertical: 10,
@@ -453,12 +515,8 @@ const s = StyleSheet.create({
     flexDirection:   'row',
     gap:             4,
   },
-  btnAdded: {
-    borderColor: Colors.surface[20],
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
+  btnAdded:    { borderColor: Colors.surface[20] },
+  btnDisabled: { opacity: 0.5 },
   btnText: {
     fontFamily:    FontFamily.sans,
     fontSize:      14,
@@ -467,10 +525,9 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     color:         Colors.surface[200],
   },
-  btnTextMuted: {
-    color: Colors.surface[150],
-  },
+  btnTextMuted: { color: Colors.surface[150] },
 
+  // ── Empty state ─────────────────────────────────────────────────────────────
   emptyText: {
     fontFamily:    FontFamily.sans,
     fontSize:      14,

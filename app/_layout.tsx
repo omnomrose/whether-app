@@ -12,9 +12,8 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     HedvigLettersSerif_400Regular: require("@expo-google-fonts/hedvig-letters-serif/400Regular/HedvigLettersSerif_400Regular.ttf"),
-    PublicSans_400Regular: require("@expo-google-fonts/public-sans/400Regular/PublicSans_400Regular.ttf"),
-    PublicSans_500Medium: require("@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf"),
-    PublicSans_700Bold: require("@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf"),
+    DMMono_400Regular: require("@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf"),
+    DMMono_500Medium: require("@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf"),
     DMSans_400Regular: require("@expo-google-fonts/dm-sans/400Regular/DMSans_400Regular.ttf"),
   });
 
@@ -33,7 +32,7 @@ export default function RootLayout() {
           // whether_onboarded:true = user has set their location at least once
           // Google users have `name` from OAuth so we can't use that as the flag
           const completedOnboarding = session.user.user_metadata?.whether_onboarded === true;
-          router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/location");
+          router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/name");
         } else if (_event === "SIGNED_OUT") {
           router.replace("/(onboarding)/welcome");
         }
@@ -51,7 +50,7 @@ export default function RootLayout() {
       const { data, error } = await supabase.auth.exchangeCodeForSession(url);
       if (!error) {
         const completedOnboarding = data.user?.user_metadata?.whether_onboarded === true;
-        router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/location");
+        router.replace(completedOnboarding ? "/(tabs)" : "/(onboarding)/name");
       }
     };
 

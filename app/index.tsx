@@ -24,7 +24,7 @@ export default function Index() {
 
   if (session) {
     const completedOnboarding = session.user.user_metadata?.whether_onboarded === true;
-    return <Redirect href={completedOnboarding ? "/(tabs)" : "/(onboarding)/location"} />;
+    return <Redirect href={completedOnboarding ? "/(tabs)" : "/(onboarding)/name"} />;
   }
   return <Redirect href="/(onboarding)/welcome" />;
 }

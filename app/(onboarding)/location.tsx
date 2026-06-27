@@ -1,5 +1,5 @@
 // Onboarding — city/location picker
-// Figma 144:45 (Search Container collapsed) + 144:456 (Search Container expanded)
+// Figma 144:45 (Search Container collapsed) + 335:113 (Search Container expanded)
 // Frame: 393 × 852
 //
 // Key design decisions:
@@ -41,19 +41,19 @@ import { router } from 'expo-router';
 import * as ExpoLocation from 'expo-location';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
-import { Typography } from '@/constants/Typography';
+import { Typography, FontFamily } from '@/constants/Typography';
 import { useWeatherStore } from '@/store/weatherStore';
 
 // ─── Figma constants (frame 393 × 852) ───────────────────────────────────────
 const FIGMA_H         = 852;
-// Search Container positions
-const CARD_TOP_IDLE   = 672;   // node 161:256
-const CARD_TOP_FOCUS  = 481;   // node 189:435
-const CARD_H_IDLE     = 180;   // node 161:256
-const CARD_H_FOCUS    = 371;   // node 189:435
+// Search Container positions (Figma node ids)
+const CARD_TOP_IDLE   = 670;   // node 161:256 top
+const CARD_TOP_FOCUS  = 320;   // node 335:115 top
+const CARD_H_IDLE     = 180;   // node 161:256 height
+const CARD_H_FOCUS    = 532;   // node 335:115 height
 // Results list
-const RESULTS_MAX_H   = 130;   // node 189:446 height
-const THUMB_H         = 35;
+const RESULTS_MAX_H   = 130;   // node 335:126 height
+const THUMB_H         = 73;    // node 335:139 height (scrollbar pill)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Morph animation configs ──────────────────────────────────────────────────
@@ -241,12 +241,13 @@ function ResultRow({
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function LocationScreen() {
-  const [query,       setQuery]       = useState('');
-  const [results,     setResults]     = useState<GeoResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [contentH,    setContentH]    = useState(0);
-  const [scrollY,     setScrollY]     = useState(0);
+  const [query,            setQuery]            = useState('');
+  const [results,          setResults]          = useState<GeoResult[]>([]);
+  const [isSearching,      setIsSearching]      = useState(false);
+  const [loading,          setLoading]          = useState(false);
+  const [contentH,         setContentH]         = useState(0);
+  const [scrollY,          setScrollY]          = useState(0);
+  const [confirmedResult,  setConfirmedResult]  = useState<GeoResult | null>(null);
 
   const webRef       = useRef<WebView>(null);
   const inputRef     = useRef<TextInput>(null);
@@ -380,8 +381,13 @@ export default function LocationScreen() {
     setDisplayLocation(label);
     Keyboard.dismiss();
     dismissSearch();
-    // Wait for the collapse animation to start before pushing the next screen
-    setTimeout(() => router.push('/(onboarding)/location-set'), 500);
+    // Show the confirm button (Figma node 343:161 — checkmark at top:621)
+    setTimeout(() => setConfirmedResult(result), 460);
+  };
+
+  const handleConfirm = () => {
+    setConfirmedResult(null);
+    router.push('/(onboarding)/location-set');
   };
 
   const handleSubmit = async () => {
@@ -572,12 +578,25 @@ export default function LocationScreen() {
             // Figma node 179:284 "instructions caption" — py:8
             <View style={s.captionRow}>
               <Text style={s.caption}>
-                search for a city to see what the weather is like there
+                search to see what the weather is like there
               </Text>
             </View>
           )}
         </View>
       </Animated.View>
+
+      {/* ── Confirm button — Figma node 343:161 ──────────────────── */}
+      {/* Appears after a city is selected; top:621 on 852 frame     */}
+      {/* 40×40 circle with checkmark, right-aligned near map edge   */}
+      {confirmedResult !== null && (
+        <Pressable
+          style={[s.confirmBtn, { top: (621 / FIGMA_H) * screenH }]}
+          onPress={handleConfirm}
+          hitSlop={8}
+        >
+          <Ionicons name="checkmark" size={20} color={Colors.surface[200]} />
+        </Pressable>
+      )}
 
     </View>
   );
@@ -680,27 +699,27 @@ const s = StyleSheet.create({
   },
   locationText: { ...Typography.caption, color: Colors.surface[150] },
 
-  // Search bar — Figma: px-16, py-8, radius:200, border:surface-100
-  // Idle: gradient bg (surface-100 → transparent, bottom→top)
-  // Active: solid surface-100 bg
+  // Search bar
+  // Idle  (Figma 144:56): radius:4, glass gradient bg, border:surface-150
+  // Active (Figma 335:121): radius:200 pill, solid surface-100 bg, border:surface-150
   searchBar: {
     flexDirection:     'row',
     alignItems:        'center',
     gap:               10,
     height:            32,
     paddingHorizontal: 16,
-    borderRadius:      200,
+    borderRadius:      4,                          // Figma idle: radius-1 = 4
     borderWidth:       1,
-    borderColor:       Colors.surface[100],
-    backgroundColor:   'rgba(245,244,244,0.45)',   // idle: slightly transparent
+    borderColor:       Colors.surface[150],        // #786c6c in both states
+    backgroundColor:   'rgba(245,244,244,0.44)',   // Figma idle: via rgba(245,244,244,0.44)
   },
   searchBarActive: {
-    backgroundColor: Colors.surface[100],          // active: solid fill
-    borderColor:     Colors.surface[100],
+    borderRadius:    200,                          // Figma active: radius-10 = 200 (pill)
+    backgroundColor: Colors.surface[100],          // active: solid surface-100
   },
   searchInput: {
     flex:          1,
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,                // DM Mono Regular
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
@@ -716,15 +735,16 @@ const s = StyleSheet.create({
     opacity:         0.2,
   },
 
-  // ── Caption — Figma node 179:284, fontSize:10, py:8 ─────────────────────
+  // ── Caption — Figma node 179:284 (caption-2: DM Mono 10px), py:8 ─────────
   captionRow: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   caption: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,                // DM Mono Regular
     fontSize:      10,
     lineHeight:    16,
-    letterSpacing: -0.18,
+    letterSpacing: -0.15,                          // Figma caption-2: tracking-[-0.15px]
     color:         Colors.surface[150],
     textAlign:     'center',
+    textTransform: 'uppercase',
   },
 
   // ── Results — Figma 189:446 "indexing city results": h:130, py:8, gap:20 ─
@@ -745,25 +765,44 @@ const s = StyleSheet.create({
     gap:           14,
   },
   resultIcon: { flexShrink: 0 },
-  // Muted portion of the label
+  // Muted portion of the label (DM Mono, surface-30 #5b5a5a)
   resultDim: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
     color:         Colors.surface[30],   // #5b5a5a
     flexShrink:    1,
   },
-  // Matched (typed) portion of the label
+  // Matched (typed) portion — near-black #1e1e1e per Figma 335:130
   resultMatch: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
-    color:         '#1e1e1e',            // Figma: near-black for the match
+    color:         '#1e1e1e',
   },
 
-  // ── Custom scrollbar — Figma 144:467: w:2, h:35, #d9d9d9, radius:100 ────
+  // ── Confirm button — Figma node 343:161: 40×40 circle at top:621 right:20 ─
+  // calc(83.33%+5.5px) ≈ 333px from left on 393px frame → right:~40px
+  confirmBtn: {
+    position:        'absolute',
+    right:           20,
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: Colors.surface[100],
+    alignItems:      'center',
+    justifyContent:  'center',
+    zIndex:          15,
+    shadowColor:     '#1d1d1d',
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.10,
+    shadowRadius:    8,
+    elevation:       4,
+  },
+
+  // ── Custom scrollbar — Figma 335:139: w:2, h:73, #d9d9d9, radius:100 ────
   scrollTrack: {
     width:          10,   // wider tap target; visual thumb is 2px
     justifyContent: 'flex-start',
