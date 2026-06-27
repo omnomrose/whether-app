@@ -8,7 +8,7 @@ export const Colors = {
     30:  '#5b5a5a',            // dim text — unmatched search results
     100: '#f5f4f4',
     150: '#786c6c',            // muted brownish-gray
-    200: '#2b1e1e',            // near-black
+    200: '#262222',            // near-black
   },
   primary: {
     10: 'transparent',
@@ -35,7 +35,7 @@ export const Colors = {
     200: '#16a34a',
   },
   text: {
-    primary: '#2b1e1e',
+    primary: '#262222',
     muted: '#5b5a5a',
   },
   // Gradient tokens — pass directly to expo-linear-gradient

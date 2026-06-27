@@ -193,13 +193,9 @@ export default function CameraScanScreen() {
   const anyProcessing = photos.some((p) => p.isProcessing);
   const lastError     = photos.findLast?.((p) => p.bgError)?.bgError ?? null;
 
-  // ── Auto-navigate when all 6 captured ─────────────────────────────────────
-  useEffect(() => {
-    if (allCaptured && capturedCount === SCAN_STEPS.length) {
-      const t = setTimeout(() => router.push('/(onboarding)/photo-confirm'), 300);
-      return () => clearTimeout(t);
-    }
-  }, [allCaptured, capturedCount]);
+  // ── Navigate to photo-confirm after each capture ───────────────────────────
+  // Handled inside handleCapture immediately after addCapture() so the user
+  // reviews each photo before coming back for the next step.
 
   // ── Focus frame animation (fade + scale in on permission grant) ─────────────
   const frameOpacity    = useSharedValue(0);
@@ -326,6 +322,9 @@ export default function CameraScanScreen() {
       if (!uri) return;
 
       const photoId = addCapture(uri);
+
+      // Navigate immediately — user reviews & confirms before next shot
+      router.push('/(onboarding)/photo-confirm');
 
       removeBackground(uri)
         .then((bgUri) => {

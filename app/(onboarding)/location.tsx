@@ -6,7 +6,7 @@
 //  - Card is ALWAYS full-width (left:0, right:0) — only `top` and `maxHeight` morph
 //  - Morph runs on the Reanimated UI thread (withTiming) for a native 60fps feel
 //  - Glass card: pure-RN layered approach (base fill + sheen + shadow) — no native blur needed
-//  - LinearGradient header matches the Figma fade-from-surface overlay
+//  - Header is a solid surface-100 View (no gradient — matches final Figma)
 //  - Location button is ABOVE the search bar (corrected from earlier reversed order)
 //  - Result rows: building icon + highlighted query match + muted remainder
 
@@ -21,6 +21,7 @@ import {
   Keyboard,
   useWindowDimensions,
   ScrollView,
+  Image,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
@@ -216,11 +217,9 @@ function ResultRow({
 
   return (
     <Pressable style={s.resultRow} onPress={onPress} hitSlop={4}>
-      <Ionicons
-        name="business-outline"
-        size={16}
-        color={Colors.surface[30]}
-        style={s.resultIcon}
+      <Image
+        source={require('@/assets/images/icons/icon-business.png')}
+        style={[s.resultIcon, { width: 16, height: 16, tintColor: Colors.surface[30] }]}
       />
       {matchIdx === -1 ? (
         <Text style={s.resultDim} numberOfLines={1}>{label}</Text>
@@ -440,18 +439,10 @@ export default function LocationScreen() {
       />
 
       {/* ── Header — Figma node 185:347 ──────────────────────────────────── */}
-      {/* glass-linear: transparent (top) → solid #f5f4f4 (bottom)            */}
-      {/* glass-bg radius:12 — approximated with a 3-stop gradient that        */}
-      {/* ramps up opacity gradually, giving a frosted-in-from-above look.     */}
-      {/* justify-end pins progress + title to the solid bottom of the pane.   */}
-      <LinearGradient
-        colors={[
-          'rgba(245,244,244,0)',    // 0 %  — fully transparent, map shows through
-          'rgba(245,244,244,0.72)', // 48 % — soft midpoint (simulates blur diffusion)
-          Colors.surface[100],     // 100 % — fully solid behind the title
-        ]}
-        locations={[0, 0.48, 1]}
-        style={[s.header, { paddingTop: insets.top + 4 }]}
+      {/* Solid surface-100 fill per Figma (no gradient in final design).      */}
+      {/* justify-end pins progress + title to the bottom of the pane.         */}
+      <View
+        style={[s.header, { paddingTop: insets.top + 4, backgroundColor: Colors.surface[100] }]}
         pointerEvents="box-none"
       >
         <View style={s.headerRow}>
@@ -467,7 +458,7 @@ export default function LocationScreen() {
           </Pressable>
         </View>
         <Text style={s.title}>Which city are you based in?</Text>
-      </LinearGradient>
+      </View>
 
       {/* ── Morphing Search Container ─────────────────────────── */}
       <Animated.View style={[s.card, cardStyle]}>
@@ -498,20 +489,27 @@ export default function LocationScreen() {
 
             {/* 1 — Use current location (location btn always on top) */}
             <Pressable style={s.locationRow} onPress={handleCurrentLocation}>
-              <Ionicons
-                name="location-outline"
-                size={16}
-                color={Colors.surface[150]}
+              <Image
+                source={require('@/assets/images/icons/icon-location.png')}
+                style={{ width: 16, height: 16, tintColor: Colors.surface[150] }}
               />
               <Text style={s.locationText}>USE CURRENT LOCATION</Text>
             </Pressable>
 
             {/* 2 — Search bar */}
-            <View style={[s.searchBar, isSearching && s.searchBarActive]}>
-              <Ionicons
-                name="search-outline"
-                size={13}
-                color={isSearching ? Colors.surface[200] : Colors.surface[150]}
+            {/* Idle: glass gradient (transparent→solid). Active: solid surface-100. */}
+            <LinearGradient
+              colors={isSearching
+                ? [Colors.surface[100], Colors.surface[100]]
+                : ['rgba(245,244,244,0)', 'rgba(245,244,244,0.44)', Colors.surface[100]]}
+              locations={isSearching ? [0, 1] : [0, 0.245, 1]}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 0, y: 0 }}
+              style={[s.searchBar, isSearching && s.searchBarActive]}
+            >
+              <Image
+                source={require('@/assets/images/icons/icon-search.png')}
+                style={{ width: 13, height: 13, tintColor: isSearching ? Colors.surface[200] : Colors.surface[150] }}
               />
               <TextInput
                 ref={inputRef}
@@ -536,7 +534,7 @@ export default function LocationScreen() {
                   <Ionicons name="close-circle" size={14} color={Colors.surface[150]} />
                 </Pressable>
               ) : null}
-            </View>
+            </LinearGradient>
           </View>
 
           {/* ── Divider ──────────────────────────────────────────── */}
@@ -627,11 +625,11 @@ const s = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   skip:      { ...Typography.caption, color: Colors.surface[150] },
-  title:     { ...Typography.titleLg, color: Colors.surface[200] },
+  title:     { ...Typography.titleLg, fontSize: 18, lineHeight: 22, letterSpacing: -0.9, color: Colors.surface[200] },
 
-  // ── Progress dots — Figma: 9×9 circles, gap:3 ────────────────────────────
+  // ── Progress dots — Figma: 6×6 circles, gap:3 ────────────────────────────
   dots:   { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dot:    { width: 9, height: 9, borderRadius: 5 },
+  dot:    { width: 6, height: 6, borderRadius: 3 },
   dotOn:  { backgroundColor: Colors.surface[200] },
   dotOff: { backgroundColor: 'rgba(43,30,30,0.18)' },
 
@@ -680,8 +678,9 @@ const s = StyleSheet.create({
   },
   // Inner content — Figma padding: px-24, py-12 (idle) / p-24 (focused)
   inner: {
-    padding: 20,   // Figma inner container is 353px = 393 - 20*2
-    gap:     16,
+    paddingHorizontal: 24,
+    paddingVertical:   12,
+    gap:               20,
   },
 
   // ── Top group: location btn + search bar, gap:12 ─────────────────────────
@@ -700,8 +699,9 @@ const s = StyleSheet.create({
   locationText: { ...Typography.caption, color: Colors.surface[150] },
 
   // Search bar
-  // Idle  (Figma 144:56): radius:4, glass gradient bg, border:surface-150
-  // Active (Figma 335:121): radius:200 pill, solid surface-100 bg, border:surface-150
+  // Idle  (Figma 144:56): radius:4, glass gradient bg (bottom→top: transparent→solid)
+  // Active (Figma 335:121): radius:200 pill, solid surface-100 bg
+  // Background handled by LinearGradient in JSX — no backgroundColor here.
   searchBar: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -711,11 +711,10 @@ const s = StyleSheet.create({
     borderRadius:      4,                          // Figma idle: radius-1 = 4
     borderWidth:       1,
     borderColor:       Colors.surface[150],        // #786c6c in both states
-    backgroundColor:   'rgba(245,244,244,0.44)',   // Figma idle: via rgba(245,244,244,0.44)
+    overflow:          'hidden',                   // clip gradient to rounded corners
   },
   searchBarActive: {
-    borderRadius:    200,                          // Figma active: radius-10 = 200 (pill)
-    backgroundColor: Colors.surface[100],          // active: solid surface-100
+    borderRadius: 200,                             // Figma active: radius-10 = 200 (pill)
   },
   searchInput: {
     flex:          1,

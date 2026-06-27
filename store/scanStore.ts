@@ -16,7 +16,7 @@ import { create } from 'zustand';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 export const SCAN_STEPS = [
-  { category: 'top'    as const, label: 'TOPS',    prompt: 'FIND THREE TOPS THAT ARE IN YOUR ROTATION'  },
+  { category: 'top'    as const, label: 'TOPS',    prompt: 'FIND THREE TOPS IN YOUR ROTATION'            },
   { category: 'top'    as const, label: 'TOPS',    prompt: 'SNAP ANOTHER TOP FROM YOUR ROTATION'         },
   { category: 'top'    as const, label: 'TOPS',    prompt: 'ONE LAST TOP FROM YOUR ROTATION'              },
   { category: 'bottom' as const, label: 'BOTTOMS', prompt: 'GRAB TWO BOTTOMS FROM YOUR CLOSET'            },

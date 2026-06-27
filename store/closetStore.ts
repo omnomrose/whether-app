@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { ClothingTags } from "@/lib/claude";
+
+export type { ClothingTags };
 
 export type ClothingItem = {
   id: string;
@@ -8,6 +11,9 @@ export type ClothingItem = {
   /** Supabase Storage path — present for cloud-synced items, undefined for local-only. */
   storagePath?: string;
   category: "top" | "bottom" | "shoes" | "accessory" | "outerwear";
+  /** Structured tags from auto-tagger (type, styles, colour). Editable from closet view. */
+  clothingTags?: ClothingTags;
+  /** Flat tag array for Claude outfit recommendation prompts. */
   tags: string[];
   createdAt: string;
 };
