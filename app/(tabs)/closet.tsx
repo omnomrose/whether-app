@@ -15,7 +15,6 @@ import {
   ScrollView,
   Image,
   StyleSheet,
-  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +25,7 @@ import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useClosetStore, type ClothingItem } from '@/store/closetStore';
 import { supabase } from '@/lib/supabase';
-import { fetchClosetItems, deleteClothingItem } from '@/lib/closet';
+import { fetchClosetItems } from '@/lib/closet';
 
 // ─── Category config ───────────────────────────────────────────────────────────
 type ScanCategory = 'top' | 'bottom' | 'shoes';
@@ -97,37 +96,43 @@ function CategorySection({
   category,
   label,
   items,
-  onRemove,
+  onItemPress,
+  onCategoryPress,
   onAdd,
 }: {
-  category: ScanCategory;
-  label:    string;
-  items:    ClothingItem[];
-  onRemove: (id: string) => void;
-  onAdd:    () => void;
+  category:        ScanCategory;
+  label:           string;
+  items:           ClothingItem[];
+  onItemPress:     (id: string) => void;
+  onCategoryPress: () => void;
+  onAdd:           () => void;
 }) {
   const h = ITEM_H[category];
   const w = ITEM_W[category];
 
   return (
     <View style={sec.root}>
-      {/* Label row */}
-      <View style={sec.labelRow}>
+      {/* Label row — tapping label navigates to category page */}
+      <Pressable style={sec.labelRow} onPress={onCategoryPress} hitSlop={8}>
         <Text style={sec.label}>{label}</Text>
         <Pressable onPress={onAdd} hitSlop={10} style={sec.addBtn}>
           <Ionicons name="add" size={12} color={Colors.surface[150]} />
           <Text style={sec.addText}>ADD</Text>
         </Pressable>
-      </View>
+      </Pressable>
 
-      {/* Horizontal scroll of floating images */}
+      {/* Horizontal scroll of floating images — no × button */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[sec.scroll, { minHeight: h + 12 }]}
       >
         {items.map((item) => (
-          <Pressable key={item.id} style={[sec.item, { width: w, height: h }]}>
+          <Pressable
+            key={item.id}
+            style={[sec.item, { width: w, height: h }]}
+            onPress={() => onItemPress(item.id)}
+          >
             {item.imageUrl ? (
               <Image
                 source={{ uri: item.imageUrl }}
@@ -137,14 +142,6 @@ function CategorySection({
             ) : (
               <View style={sec.placeholder} />
             )}
-            {/* × remove badge */}
-            <Pressable
-              style={sec.removeBadge}
-              onPress={() => onRemove(item.id)}
-              hitSlop={8}
-            >
-              <Ionicons name="close" size={9} color={Colors.surface[100]} />
-            </Pressable>
           </Pressable>
         ))}
 
@@ -211,19 +208,6 @@ const sec = StyleSheet.create({
     backgroundColor: Colors.surface[10],
   },
 
-  removeBadge: {
-    position:        'absolute',
-    top:             4,
-    right:           4,
-    width:           16,
-    height:          16,
-    borderRadius:    8,
-    backgroundColor: Colors.surface[200],
-    alignItems:      'center',
-    justifyContent:  'center',
-    zIndex:          5,
-  },
-
   emptySlot: {
     borderWidth:    1,
     borderStyle:    'dashed',
@@ -239,7 +223,7 @@ export default function ClosetScreen() {
   const insets = useSafeAreaInsets();
   const { width: sw } = useWindowDimensions();
 
-  const { items, setItems, removeItem } = useClosetStore();
+  const { items, setItems } = useClosetStore();
 
   const [userName,  setUserName]  = useState('My');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -269,21 +253,13 @@ export default function ClosetScreen() {
     return () => { cancelled = true; };
   }, [setItems]);
 
-  // ── Remove: optimistic local delete → Supabase delete ─────────────────────────
-  const handleRemove = useCallback(async (id: string) => {
-    const item = items.find((i) => i.id === id);
-    removeItem(id); // remove from UI immediately
-    try {
-      await deleteClothingItem(id, item?.storagePath);
-    } catch {
-      // Re-add on failure
-      if (item) {
-        const { items: cur, setItems: si } = useClosetStore.getState();
-        si([...cur, item]);
-      }
-      Alert.alert('Could not delete', 'Please try again.');
-    }
-  }, [items, removeItem]);
+  const handleItemPress = useCallback((id: string) => {
+    router.push(`/closet-item?id=${id}` as any);
+  }, []);
+
+  const handleCategoryPress = useCallback((category: ScanCategory) => {
+    router.push(`/closet-category?category=${category}` as any);
+  }, []);
 
   const goToScan = useCallback(() => {
     router.push('/(onboarding)/closet-setup' as any);
@@ -335,7 +311,8 @@ export default function ClosetScreen() {
               category={key}
               label={label}
               items={items.filter((i) => i.category === key)}
-              onRemove={handleRemove}
+              onItemPress={handleItemPress}
+              onCategoryPress={() => handleCategoryPress(key)}
               onAdd={goToScan}
             />
           ))}

@@ -129,6 +129,20 @@ export async function fetchClosetItems(userId: string): Promise<ClothingItem[]> 
   }));
 }
 
+// ── Update tags ────────────────────────────────────────────────────────────────
+
+export async function updateClothingTags(
+  itemId: string,
+  tags:   string[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('clothing_items')
+    .update({ tags })
+    .eq('id', itemId);
+
+  if (error) throw error;
+}
+
 // ── Delete item ────────────────────────────────────────────────────────────────
 // Removes the DB row first, then the storage file (best-effort).
 

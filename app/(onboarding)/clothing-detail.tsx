@@ -21,7 +21,7 @@
 //   Tag input:        top:586, left:20, w:353
 //   UPDATE CLOSET:    top:660, centred, w:211, dark pill
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -43,13 +43,14 @@ import { useScanStore, type ScanCategory } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
 import { supabase } from '@/lib/supabase';
 import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
+import { tagClothingItemStructured } from '@/lib/claude';
 
 // ─── Figma frame reference ─────────────────────────────────────────────────────
 const FW = 393;
 const FH = 852;
 
-// ─── Suggested tags per category ──────────────────────────────────────────────
-const SUGGESTED_TAGS: Record<ScanCategory, string[]> = {
+// ─── Fallback tags if Claude is unavailable ────────────────────────────────────
+const FALLBACK_TAGS: Record<ScanCategory, string[]> = {
   top:    ['CASUAL', 'EVERYDAY', 'LAYERING'],
   bottom: ['DENIM', 'CASUAL', 'EVERYDAY'],
   shoes:  ['SNEAKERS', 'CASUAL', 'COMFORTABLE'],
@@ -71,10 +72,40 @@ export default function ClothingDetailScreen() {
   const photo = photos.find((p) => p.id === photoId);
 
   // ── Tags state ─────────────────────────────────────────────────────────────
-  const suggestedTags  = photo ? SUGGESTED_TAGS[photo.category] : [];
-  const [selectedTags, setSelectedTags] = useState<string[]>([suggestedTags[0] ?? ''].filter(Boolean));
-  const [customInput,  setCustomInput]  = useState('');
-  const [uploading,    setUploading]    = useState(false);
+  const [selectedTags,  setSelectedTags]  = useState<string[]>([]);
+  const [allTags,       setAllTags]       = useState<string[]>([]);
+  const [tagsLoading,   setTagsLoading]   = useState(true);
+  const [customInput,   setCustomInput]   = useState('');
+  const [uploading,     setUploading]     = useState(false);
+
+  // ── Auto-tag on mount ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!photo) return;
+    let cancelled = false;
+
+    (async () => {
+      setTagsLoading(true);
+      try {
+        const uri = photo.bgRemovedUri ?? photo.rawUri;
+        const result = await tagClothingItemStructured(uri, photo.category as 'top' | 'bottom' | 'shoes');
+        if (cancelled) return;
+        // Flatten structured tags into a string array: [type, ...styles, colour]
+        const flat = [result.type, ...result.styles, result.colour].filter(Boolean);
+        setAllTags(flat);
+        setSelectedTags(flat); // pre-select all AI-generated tags
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('[clothing-detail] auto-tag failed, using fallback:', err);
+        const fallback = FALLBACK_TAGS[photo.category] ?? [];
+        setAllTags(fallback);
+        setSelectedTags(fallback);
+      } finally {
+        if (!cancelled) setTagsLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [photo?.id]);  // run once per photo
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) =>
@@ -252,34 +283,42 @@ export default function ClothingDetailScreen() {
         </View>
 
         {/* Tag pills */}
-        <View style={s.tagsList}>
-          {suggestedTags.map((tag) => {
-            const active = selectedTags.includes(tag);
-            return (
-              <Pressable
-                key={tag}
-                style={[s.tagPill, active && s.tagPillActive]}
-                onPress={() => toggleTag(tag)}
-                hitSlop={6}
-              >
-                <Text style={[s.tagText, active && s.tagTextActive]}>{tag}</Text>
-              </Pressable>
-            );
-          })}
-          {/* Custom tags added by user */}
-          {selectedTags
-            .filter((t) => !suggestedTags.includes(t))
-            .map((tag) => (
-              <Pressable
-                key={tag}
-                style={[s.tagPill, s.tagPillActive]}
-                onPress={() => toggleTag(tag)}
-                hitSlop={6}
-              >
-                <Text style={[s.tagText, s.tagTextActive]}>{tag}</Text>
-              </Pressable>
-            ))}
-        </View>
+        {tagsLoading ? (
+          <View style={s.tagsLoadingRow}>
+            <ActivityIndicator size="small" color={Colors.surface[150]} />
+            <Text style={s.tagsLoadingText}>ANALYSING...</Text>
+          </View>
+        ) : (
+          <View style={s.tagsList}>
+            {/* AI-suggested tags (toggleable) */}
+            {allTags.map((tag) => {
+              const active = selectedTags.includes(tag);
+              return (
+                <Pressable
+                  key={tag}
+                  style={[s.tagPill, active && s.tagPillActive]}
+                  onPress={() => toggleTag(tag)}
+                  hitSlop={6}
+                >
+                  <Text style={[s.tagText, active && s.tagTextActive]}>{tag}</Text>
+                </Pressable>
+              );
+            })}
+            {/* Custom tags added by user (not in AI suggestions) */}
+            {selectedTags
+              .filter((t) => !allTags.includes(t))
+              .map((tag) => (
+                <Pressable
+                  key={tag}
+                  style={[s.tagPill, s.tagPillActive]}
+                  onPress={() => toggleTag(tag)}
+                  hitSlop={6}
+                >
+                  <Text style={[s.tagText, s.tagTextActive]}>{tag}</Text>
+                </Pressable>
+              ))}
+          </View>
+        )}
       </View>
 
       {/* ── "ADD TAGS..." input (Figma 144:252: top:586, left:20, w:353) ─── */}
@@ -388,6 +427,19 @@ const s = StyleSheet.create({
     letterSpacing: -0.18,
     textTransform: 'uppercase',
     color:         Colors.surface[200],
+  },
+  tagsLoadingRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           8,
+  },
+  tagsLoadingText: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      12,
+    lineHeight:    16,
+    letterSpacing: -0.18,
+    textTransform: 'uppercase',
+    color:         Colors.surface[150],
   },
   tagsList: {
     flexDirection: 'row',

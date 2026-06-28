@@ -22,6 +22,7 @@ type ClosetStore = {
   items: ClothingItem[];
   setItems: (items: ClothingItem[]) => void;
   addItem: (item: ClothingItem) => void;
+  updateItem: (id: string, patch: Partial<ClothingItem>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 };
@@ -37,6 +38,10 @@ export const useClosetStore = create<ClosetStore>()(
           ? state.items.map((i) => (i.id === item.id ? item : i))
           : [...state.items, item],
       })),
+      updateItem: (id, patch) =>
+        set((state) => ({
+          items: state.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+        })),
       removeItem: (id) =>
         set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
       clearAll: () => set({ items: [] }),
