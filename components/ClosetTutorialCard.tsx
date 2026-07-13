@@ -9,16 +9,25 @@
  * Photo slots are empty placeholders; the user will supply real images later.
  */
 
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 
+// ─── Example photos (Figma 144:68 do/don't guide) ─────────────────────────────
+const TUTORIAL_IMAGES = {
+  topsDo:    require('@/assets/images/tutorial/tops-do.jpg'),
+  topsDont:  require('@/assets/images/tutorial/tops-dont.jpg'),
+  shoesDo:   require('@/assets/images/tutorial/shoes-do.jpg'),
+  shoesDont: require('@/assets/images/tutorial/shoes-dont.jpg'),
+} as const;
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Grey placeholder box — replaced by real photos when the user provides them. */
-function PhotoSlot() {
-  return <View style={s.photoSlot} />;
+/** Do/don't example photo — fills the design's 144px slot. */
+function PhotoSlot({ source }: { source?: ImageSourcePropType }) {
+  if (!source) return <View style={s.photoSlot} />;
+  return <Image source={source} style={s.photoSlot} resizeMode="cover" />;
 }
 
 type ExampleSectionProps = {
@@ -27,10 +36,12 @@ type ExampleSectionProps = {
   doLabel: string;
   /** Caption shown above the DON'T photo (thumbs-down side) */
   dontLabel: string;
+  doImage?:   ImageSourcePropType;
+  dontImage?: ImageSourcePropType;
 };
 
 /** One guide section (e.g. "Tops & Bottoms") with a do/don't photo pair. */
-function ExampleSection({ title, doLabel, dontLabel }: ExampleSectionProps) {
+function ExampleSection({ title, doLabel, dontLabel, doImage, dontImage }: ExampleSectionProps) {
   return (
     <View style={s.section}>
       <Text style={s.sectionTitle}>{title}</Text>
@@ -44,7 +55,7 @@ function ExampleSection({ title, doLabel, dontLabel }: ExampleSectionProps) {
               <Ionicons name="thumbs-up" size={20} color={Colors.surface[200]} />
             </View>
           </View>
-          <PhotoSlot />
+          <PhotoSlot source={doImage} />
         </View>
 
         {/* ✗ DON'T column */}
@@ -55,7 +66,7 @@ function ExampleSection({ title, doLabel, dontLabel }: ExampleSectionProps) {
               <Ionicons name="thumbs-down" size={20} color={Colors.surface[200]} />
             </View>
           </View>
-          <PhotoSlot />
+          <PhotoSlot source={dontImage} />
         </View>
       </View>
     </View>
@@ -92,11 +103,15 @@ export default function ClosetTutorialCard({ onConfirm }: Props) {
             title="Tops & Bottoms"
             doLabel={'CLEAR, FLAT,\nFRONT & BACK'}
             dontLabel={'MANNEQUINS\n& HANGERS'}
+            doImage={TUTORIAL_IMAGES.topsDo}
+            dontImage={TUTORIAL_IMAGES.topsDont}
           />
           <ExampleSection
             title="Shoes"
             doLabel={'CLEAR SIDE\nVIEW'}
             dontLabel={"BIRD EYE'S\nVIEW"}
+            doImage={TUTORIAL_IMAGES.shoesDo}
+            dontImage={TUTORIAL_IMAGES.shoesDont}
           />
         </View>
 
@@ -203,11 +218,14 @@ const s = StyleSheet.create({
     flexShrink:  0,
   },
 
-  // Photo placeholder — Figma: rgba(91,90,90,0.3), h:144
+  // Do/don't photo — Figma: h:144, radius 6 (grey fill shows while loading /
+  // if a source is missing)
   photoSlot: {
+    width:           '100%',
     height:          144,
     backgroundColor: 'rgba(91,90,90,0.30)',
     borderRadius:    6,
+    overflow:        'hidden',
   },
 
   // ── CTA button — Figma 144:84 ─────────────────────────────────────────────

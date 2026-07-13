@@ -42,7 +42,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import SkyBackground from '@/components/SkyBackground';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
@@ -152,6 +152,14 @@ export default function CameraScanScreen() {
   const insets = useSafeAreaInsets();
   const { width: sw, height: sh } = useWindowDimensions();
 
+  // Two layouts (user-confirmed):
+  //   onboarding (default) — Figma 144:90: prompt top-left + progress dots
+  //     top-right + flash bottom-left
+  //   quick (nav camera)   — Figma 675:368: BACK top-left + flash top-right
+  //     + upload bottom-left
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isQuick  = mode === 'quick';
+
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -194,9 +202,9 @@ export default function CameraScanScreen() {
   const anyProcessing = photos.some((p) => p.isProcessing);
   const lastError     = photos.findLast?.((p) => p.bgError)?.bgError ?? null;
 
-  // ── Navigate to photo-confirm after each capture ───────────────────────────
-  // Handled inside handleCapture immediately after addCapture() so the user
-  // reviews each photo before coming back for the next step.
+  // ── Photo-confirm popup ────────────────────────────────────────────────────
+  // Opens ONLY when the user taps the photo-confirmation thumbnail below —
+  // captures no longer auto-navigate.
 
   // ── Focus frame animation (fade + scale in on permission grant) ─────────────
   const frameOpacity    = useSharedValue(0);
@@ -324,8 +332,8 @@ export default function CameraScanScreen() {
 
       const photoId = addCapture(uri);
 
-      // Navigate immediately — user reviews & confirms before next shot
-      router.push('/(onboarding)/photo-confirm');
+      // Stay on camera — the recent-photos popup only opens when the user
+      // taps the photo-confirmation thumbnail (bottom-right).
 
       removeBackground(uri)
         .then((bgUri) => {
@@ -356,7 +364,7 @@ export default function CameraScanScreen() {
     if (result.canceled || !uri) return;
 
     const photoId = addCapture(uri);
-    router.push('/(onboarding)/photo-confirm');
+    // Stay on camera — popup opens only via the photo-confirmation thumbnail.
 
     removeBackground(uri)
       .then((bgUri) => {
@@ -405,6 +413,13 @@ export default function CameraScanScreen() {
   // ── Current step ───────────────────────────────────────────────────────────
   const safeStep    = Math.min(stepIndex, SCAN_STEPS.length - 1);
   const currentStep = SCAN_STEPS[safeStep];
+
+  // Progress dots (onboarding mode) — only dots for the current category
+  const allInCategory   = SCAN_STEPS.map((st, i) => ({ ...st, i }))
+    .filter((st) => st.category === currentStep.category);
+  const categoryStart   = allInCategory[0]?.i ?? 0;
+  const indexInCategory = safeStep - categoryStart;
+  const totalInCategory = allInCategory.length;
 
   // ─── Permission request ────────────────────────────────────────────────────
   if (!permission) return <View style={s.root} />;
@@ -457,29 +472,65 @@ export default function CameraScanScreen() {
     // paddingTop: insets.top shifts all content below the notch/dynamic island
     <View style={[s.root, { paddingTop: insets.top }]} {...pinchResponder.panHandlers}>
 
-      {/* ── BACK link — Figma 675:418: left:20, top:85, chevron + "back" ── */}
-      <Pressable
-        style={[s.backBtn, { top: sy(85), left: 20 }]}
-        onPress={() => router.back()}
-        hitSlop={12}
-      >
-        <Ionicons name="chevron-back" size={14} color={Colors.surface[100]} />
-        <Text style={s.backText}>BACK</Text>
-      </Pressable>
+      {isQuick ? (
+        <>
+          {/* ── QUICK MODE — Figma 675:368 ─────────────────────────────── */}
+          {/* BACK link — left:20, top:85, chevron + "back" */}
+          <Pressable
+            style={[s.backBtn, { top: sy(85), left: 20 }]}
+            onPress={() => router.back()}
+            hitSlop={12}
+          >
+            <Ionicons name="chevron-back" size={14} color={Colors.surface[100]} />
+            <Text style={s.backText}>BACK</Text>
+          </Pressable>
 
-      {/* ── Flash toggle — Figma 675:1047: top:85, right:20 ─────────────── */}
-      <Pressable
-        style={[s.flashBtn, { top: sy(85), right: 20 }]}
-        onPress={() => setFlashMode((m) => (m === 'off' ? 'on' : 'off'))}
-        hitSlop={14}
-        accessibilityLabel={flashMode === 'off' ? 'Turn flash on' : 'Turn flash off'}
-      >
-        <Ionicons
-          name={flashMode === 'on' ? 'flash' : 'flash-off'}
-          size={22}
-          color={flashMode === 'on' ? '#f5d050' : 'rgba(245,244,244,0.55)'}
-        />
-      </Pressable>
+          {/* Flash toggle — top:85, right:20 */}
+          <Pressable
+            style={[s.flashBtn, { top: sy(85), right: 20 }]}
+            onPress={() => setFlashMode((m) => (m === 'off' ? 'on' : 'off'))}
+            hitSlop={14}
+            accessibilityLabel={flashMode === 'off' ? 'Turn flash on' : 'Turn flash off'}
+          >
+            <Ionicons
+              name={flashMode === 'on' ? 'flash' : 'flash-off'}
+              size={22}
+              color={flashMode === 'on' ? '#f5d050' : 'rgba(245,244,244,0.55)'}
+            />
+          </Pressable>
+        </>
+      ) : (
+        <>
+          {/* ── ONBOARDING MODE — Figma 144:90 ─────────────────────────── */}
+          {/* Prompt — left:20, top:68, w:169 (fixed so line breaks match) */}
+          <Text style={[s.prompt, { top: sy(68), left: 20, width: 169 }]}>
+            {allCaptured ? 'TAP YOUR PHOTOS TO REVIEW' : currentStep.prompt}
+          </Text>
+
+          {/* Progress dots — top:77, right:20 */}
+          {!allCaptured && (
+            <View style={[s.dotsRow, { top: sy(77), right: 20 }]}>
+              {Array.from({ length: totalInCategory }).map((_, i) => {
+                const complete = i < indexInCategory;
+                const active   = i === indexInCategory;
+                return (
+                  <View
+                    key={i}
+                    style={[
+                      s.dot,
+                      complete ? s.dotComplete : active ? s.dotActive : s.dotFuture,
+                    ]}
+                  >
+                    {complete && (
+                      <Ionicons name="checkmark" size={10} color={Colors.surface[200]} />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </>
+      )}
 
       {/* ── Camera card — rounded, contained viewfinder */}
       {/* Figma: left:20, top:124, w:353, h:601, r:16 */}
@@ -575,16 +626,32 @@ export default function CameraScanScreen() {
 
       {/* ════════ CONTROLS BELOW CARD (on dark bg) ════════ */}
 
-      {/* ── Upload from library — Figma 675:1041: bottom-left ─────────── */}
-      <Pressable
-        style={[s.uploadBtn, { left: sx(FLASH_L), top: flashTop }]}
-        onPress={handlePickFromLibrary}
-        hitSlop={14}
-        disabled={capturing || allCaptured}
-        accessibilityLabel="Upload a photo from your library"
-      >
-        <Ionicons name="push-outline" size={24} color="rgba(245,244,244,0.85)" />
-      </Pressable>
+      {isQuick ? (
+        /* Upload from library — Figma 675:1041: bottom-left (quick mode) */
+        <Pressable
+          style={[s.uploadBtn, { left: sx(FLASH_L), top: flashTop }]}
+          onPress={handlePickFromLibrary}
+          hitSlop={14}
+          disabled={capturing || allCaptured}
+          accessibilityLabel="Upload a photo from your library"
+        >
+          <Ionicons name="push-outline" size={24} color="rgba(245,244,244,0.85)" />
+        </Pressable>
+      ) : (
+        /* Flash toggle — Figma 144:90: bottom-left (onboarding mode) */
+        <Pressable
+          style={[s.uploadBtn, { left: sx(FLASH_L), top: flashTop }]}
+          onPress={() => setFlashMode((m) => (m === 'off' ? 'on' : 'off'))}
+          hitSlop={14}
+          accessibilityLabel={flashMode === 'off' ? 'Turn flash on' : 'Turn flash off'}
+        >
+          <Ionicons
+            name={flashMode === 'on' ? 'flash' : 'flash-off'}
+            size={24}
+            color={flashMode === 'on' ? '#f5d050' : 'rgba(245,244,244,0.55)'}
+          />
+        </Pressable>
+      )}
 
       {/* ── Shutter — Figma: centred H, top:752, outer:72 inner:57 */}
       <Pressable
@@ -675,6 +742,45 @@ export default function CameraScanScreen() {
 const s = StyleSheet.create({
   // Root — Figma background: surface-200 (#2b1e1e), dark warm brown
   root: { flex: 1, backgroundColor: Colors.surface[200] },
+
+  // ── Prompt text (onboarding) — Figma 144:100: 14/18px uppercase, light
+  prompt: {
+    position:      'absolute',
+    fontFamily:    FontFamily.sans,
+    fontSize:      14,
+    lineHeight:    18,
+    letterSpacing: -0.28,
+    textTransform: 'uppercase',
+    color:         Colors.surface[100],
+    zIndex:        10,
+  },
+
+  // ── Progress dots (onboarding) — Figma 392:142: 18×18 circles, gap 8
+  dotsRow: {
+    position:      'absolute',
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           8,
+    zIndex:        10,
+  },
+  dot: {
+    width:          18,
+    height:         18,
+    borderRadius:   9,
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  dotComplete: { backgroundColor: Colors.surface[100] },
+  dotActive:   {
+    backgroundColor: 'transparent',
+    borderWidth:     1.5,
+    borderColor:     'rgba(245,244,244,0.85)',
+  },
+  dotFuture:   {
+    backgroundColor: 'transparent',
+    borderWidth:     1.5,
+    borderColor:     'rgba(245,244,244,0.30)',
+  },
 
   // ── BACK link — Figma 675:418: chevron + "back", surface-100 14px
   backBtn: {

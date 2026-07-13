@@ -31,11 +31,14 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import * as FileSystem from 'expo-file-system';
+// SDK 54: readAsStringAsync/EncodingType live in the legacy entry point —
+// the root export is the new File/Directory API (EncodingType is undefined there).
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 import type { ClothingItem } from '@/store/closetStore';
-import { tagClothingItemStructured, flattenTags, parseTags } from './claude';
+import { flattenTags, parseTags } from './claude';
+import { tagClothingItemStructured } from './gemini';
 
 const BUCKET = 'closet-images';
 
@@ -117,18 +120,34 @@ export async function saveClothingItem(params: {
 // ── Fetch all items for a user ─────────────────────────────────────────────────
 
 export async function fetchClosetItems(userId: string): Promise<ClothingItem[]> {
-  const { data, error } = await supabase
+  // Try including the custom `name` column; fall back gracefully if the
+  // column hasn't been added to the table yet (see updateClothingName).
+  const withName = await supabase
     .from('clothing_items')
-    .select('id, image_url, storage_path, category, tags, created_at')
+    .select('id, image_url, storage_path, category, tags, created_at, name')
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
 
+  let data:  Record<string, unknown>[] | null = withName.data;
+  let error = withName.error;
+
+  if (error) {
+    const fallback = await supabase
+      .from('clothing_items')
+      .select('id, image_url, storage_path, category, tags, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    data  = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) throw error;
 
-  return (data ?? []).map((row) => {
+  return (data ?? []).map((row: Record<string, unknown>) => {
     const tags = (row.tags as string[]) ?? [];
     return {
       id:           row.id          as string,
+      name:         (row.name as string | null) ?? undefined,
       imageUrl:     row.image_url   as string,
       storagePath:  row.storage_path as string,
       category:     row.category    as ClothingItem['category'],
@@ -157,6 +176,24 @@ export async function updateClothingTags(
     .eq('id', itemId);
 
   if (error) throw error;
+}
+
+// ── Rename item ────────────────────────────────────────────────────────────────
+// Best-effort cloud sync: the local rename (Zustand + AsyncStorage) always
+// works; the DB write needs a `name` column on clothing_items. Add it once in
+// the Supabase SQL editor:
+//   alter table clothing_items add column if not exists name text;
+
+export async function updateClothingName(
+  itemId: string,
+  name:   string | null,
+): Promise<void> {
+  if (!UUID_RE.test(itemId)) return; // local-only item
+  const { error } = await supabase
+    .from('clothing_items')
+    .update({ name })
+    .eq('id', itemId);
+  if (error) console.warn('[closet] rename cloud sync failed (add `name` column?):', error.message);
 }
 
 // ── Retag a single item via Claude ────────────────────────────────────────────
@@ -218,16 +255,17 @@ export async function migrateClosetTags(
     (i) => needsRetag(i.tags) && ['top','bottom','shoes'].includes(i.category),
   );
 
-  await Promise.allSettled(
-    stale.map(async (item) => {
-      try {
-        const newTags = await retagClosetItem(item);
-        results[item.id] = newTags;
-      } catch {
-        // Silent — old tags stay in place
-      }
-    }),
-  );
+  // Sequential with a small gap — parallel bursts trip the Gemini free-tier
+  // per-minute rate limit (429), which used to kill tagging for the session.
+  for (const item of stale) {
+    try {
+      const newTags = await retagClosetItem(item);
+      results[item.id] = newTags;
+    } catch {
+      // Silent — old tags stay in place, self-heal retries later
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
 
   return results;
 }

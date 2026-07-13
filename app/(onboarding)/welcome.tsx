@@ -20,7 +20,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform,
+
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +28,7 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import AuthBackground from '@/components/AuthBackground';
-import { GoogleIcon, AppleIcon, MailIcon } from '@/components/SocialIcons';
+import { GoogleIcon, MailIcon } from '@/components/SocialIcons';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { supabase } from '@/lib/supabase';
@@ -102,16 +102,6 @@ export default function WelcomeScreen() {
     }
   }
 
-  // ── Apple Sign-In ───────────────────────────────────────────────────────
-  function signInWithApple() {
-    Alert.alert(
-      'Apple Sign-In',
-      Platform.OS !== 'ios'
-        ? 'Apple Sign-In is only available on iOS.'
-        : 'Apple Sign-In requires a development build.\nInstall expo-apple-authentication and run `expo run:ios`.',
-    );
-  }
-
   // All elements use absolute positioning driven by Figma y values scaled to device height
   const logoTop    = Math.max(8, toY(D_LOGO_Y));
   const taglineTop = Math.max(0, toY(D_TAGLINE_Y));
@@ -170,17 +160,6 @@ export default function WelcomeScreen() {
             >
               <IconCircle>
                 <GoogleIcon size={20} />
-              </IconCircle>
-            </Pressable>
-
-            {/* Apple — 409:78 */}
-            <Pressable
-              onPress={signInWithApple}
-              style={({ pressed }) => [pressed && styles.dimmed]}
-              accessibilityLabel="Sign in with Apple"
-            >
-              <IconCircle>
-                <AppleIcon />
               </IconCircle>
             </Pressable>
 
@@ -350,11 +329,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Figma 409:86: 231px container, 3 circles, justify-between
+  // Figma 409:86 — two circles (Google + email), centred with a gap
   socialRow: {
-    flexDirection: 'row',
-    width: 231,
-    justifyContent: 'space-between',
+    flexDirection:  'row',
+    justifyContent: 'center',
+    gap:            24,
   },
 
   // ── Icon circle — node 409:77/78/80 (solid, no glass) ────────────────────

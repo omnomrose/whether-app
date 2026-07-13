@@ -43,13 +43,18 @@ import { useScanStore, type ScanCategory } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
 import { supabase } from '@/lib/supabase';
 import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
-import { tagClothingItemStructured, flattenTags } from '@/lib/claude';
+import { flattenTags } from '@/lib/claude';
+import { tagClothingItemStructured } from '@/lib/gemini';
 
 // ─── Figma frame reference ─────────────────────────────────────────────────────
 const FW = 393;
 const FH = 852;
 
 // ─── Fallback tags (type, style, colour) if Claude is unavailable ─────────────
+// Every scanned item must carry 1–3 tags
+const MIN_TAGS = 1;
+const MAX_TAGS = 3;
+
 const FALLBACK_TAGS: Record<ScanCategory, [string, string, string]> = {
   top:    ['T-SHIRT', 'CASUAL', 'WHITE'],
   bottom: ['JEANS',   'CASUAL', 'BLACK'],
@@ -108,16 +113,21 @@ export default function ClothingDetailScreen() {
     return () => { cancelled = true; };
   }, [photo?.id]);  // run once per photo
 
+  // 1–3 tags enforced: deselect always allowed, select capped at MAX_TAGS
   const toggleTag = useCallback((tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) return prev.filter((t) => t !== tag);
+      if (prev.length >= MAX_TAGS) return prev;
+      return [...prev, tag];
+    });
   }, []);
 
   const handleAddCustomTag = useCallback(() => {
     const trimmed = customInput.trim().toUpperCase();
     if (!trimmed) return;
-    setSelectedTags((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setSelectedTags((prev) =>
+      prev.includes(trimmed) || prev.length >= MAX_TAGS ? prev : [...prev, trimmed]
+    );
     setCustomInput('');
   }, [customInput]);
 
@@ -135,6 +145,10 @@ export default function ClothingDetailScreen() {
   // then adds the item to the local Zustand store with the public URL + DB id.
   const handleUpdateCloset = useCallback(async () => {
     if (!photo || uploading) return;
+    if (selectedTags.length < MIN_TAGS) {
+      Alert.alert('Add a tag', 'Every item needs at least one tag (max 3).');
+      return;
+    }
 
     const localUri = photo.bgRemovedUri ?? photo.rawUri;
 
@@ -341,9 +355,13 @@ export default function ClothingDetailScreen() {
 
       {/* ── "UPDATE CLOSET" button (Figma 144:256: top:660, centred, w:211) */}
       <Pressable
-        style={[s.updateBtn, { top: btnTop, left: btnLeft, width: sx(211) }, uploading && s.updateBtnLoading]}
+        style={[
+          s.updateBtn,
+          { top: btnTop, left: btnLeft, width: sx(211) },
+          (uploading || selectedTags.length < MIN_TAGS) && s.updateBtnLoading,
+        ]}
         onPress={handleUpdateCloset}
-        disabled={uploading}
+        disabled={uploading || selectedTags.length < MIN_TAGS}
         accessibilityLabel="Update closet"
       >
         {uploading ? (
@@ -455,10 +473,10 @@ const s = StyleSheet.create({
     gap:           11,
     alignItems:    'center',
   },
+  // Figma 667:132 — px:16, py:8, r:4, border surface-200 (32px tall)
   tagPill: {
-    height:            24,
-    paddingHorizontal: 14,
-    paddingVertical:   4,
+    paddingHorizontal: 16,
+    paddingVertical:   8,
     borderRadius:      4,
     borderWidth:       1,
     borderColor:       Colors.surface[200],

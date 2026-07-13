@@ -51,7 +51,7 @@ const MORPH = { damping: 16, stiffness: 220, mass: 0.75 } as const;
 // shown here; it lives solely in the onboarding flow.
 const TABS = [
   { label: 'Closet', Icon: ClosetIcon, href: '/(tabs)/closet',            push: false },
-  { label: 'Scan',   Icon: CameraIcon, href: '/(onboarding)/camera-scan', push: true  },
+  { label: 'Scan',   Icon: CameraIcon, href: '/(onboarding)/camera-scan?mode=quick', push: true  },
   { label: 'Home',   Icon: CloudIcon,  href: '/(tabs)/',                  push: false },
 ] as const;
 

@@ -4,7 +4,9 @@ const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY!;
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 // NOTE: "claude-sonnet-4-6" (previous value) is not a valid model ID — every
 // tagging call 404'd and errors were swallowed, so items never got tags.
-const MODEL = "claude-sonnet-5";
+// Haiku is ~1/12 the price of Sonnet and is plenty for picking tags from a
+// small fixed vocabulary — stretches API credits much further.
+const MODEL = "claude-haiku-4-5-20251001";
 
 // ─── Structured clothing tags (matches in-app filter UI) ──────────────────────
 export type ClothingTags = {
@@ -46,7 +48,8 @@ type ClaudeImageSource =
 
 // ── Downscale local photos before tagging ─────────────────────────────────────
 // Full-res camera captures can exceed the API's ~5MB image limit and make
-// tagging fail intermittently. 1024px @ 0.8 JPEG is plenty for tagging.
+// tagging fail intermittently. Image tokens scale with pixel count, so 512px
+// (~4× cheaper than 1024px) keeps tagging accurate while conserving credits.
 async function downscaleForTagging(uri: string): Promise<ClaudeImageSource | null> {
   try {
     // Dynamic import keeps this module loadable in environments without the
@@ -54,8 +57,8 @@ async function downscaleForTagging(uri: string): Promise<ClaudeImageSource | nul
     const ImageManipulator = await import('expo-image-manipulator');
     const result = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: 1024 } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      [{ resize: { width: 512 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
     if (result.base64) {
       return { sourceType: 'base64', base64: result.base64, mediaType: 'image/jpeg' };
@@ -130,10 +133,17 @@ function buildImageContent(src: ClaudeImageSource) {
  * Accepts any URI: https:// (Supabase), data:, or file://.
  * Returns exactly 3 tags: [type, topStyle, colour].
  */
+// Circuit breaker — once the API reports "credit balance too low", skip all
+// further tagging calls this session instead of hammering a dead endpoint.
+// (Callers already fall back to category-based tags.)
+let billingBlocked = false;
+
 export async function tagClothingItemStructured(
   imageUri: string,
   category: 'top' | 'bottom' | 'shoes',
 ): Promise<ClothingTags> {
+  if (billingBlocked) throw new Error('Claude tagging skipped: out of API credits');
+
   const src   = await uriToClaudeImage(imageUri);
   const types = TYPE_OPTIONS[category] ?? TYPE_OPTIONS.top;
 
@@ -168,6 +178,7 @@ Return ONLY the JSON object, no commentary. Example: {"type":"T-SHIRT","styles":
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     console.warn(`[claude] tagging failed ${res.status}:`, body.slice(0, 300));
+    if (body.includes('credit balance is too low')) billingBlocked = true;
     throw new Error(`Claude tagging failed: ${res.status}`);
   }
   const data = await res.json();

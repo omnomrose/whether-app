@@ -14,7 +14,7 @@
 //      – After 50 s idle → fade in dim overlay + hint text over 20 s
 //      – After fade completes → closet button pulses to draw attention
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -95,7 +95,7 @@ function PfpCircle({ name }: { name: string | null }) {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function LocationSetScreen() {
   const insets              = useSafeAreaInsets();
-  const { height: screenH } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const { location, displayLocation, weather, setWeather, userName } = useWeatherStore();
 
   const [loading,    setLoading]    = useState(!weather);
@@ -150,9 +150,6 @@ export default function LocationSetScreen() {
   // Once the fade completes the closet button starts a gentle scale pulse.
   const tutorialOpacity      = useSharedValue(0);
   const closetScale          = useSharedValue(1);
-  // Ref + state for floating closet button position
-  const closetPlaceholderRef = useRef<View>(null);
-  const [closetPos, setClosetPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const tid = setTimeout(() => {
@@ -174,14 +171,6 @@ export default function LocationSetScreen() {
   const tutorialFadeStyle  = useAnimatedStyle(() => ({ opacity: tutorialOpacity.value }));
   const closetScaleStyle   = useAnimatedStyle(() => ({
     transform: [{ scale: closetScale.value }],
-  }));
-  // White glow ring around the closet button — appears as tutorial fades in
-  const closetRingStyle    = useAnimatedStyle(() => ({
-    opacity: tutorialOpacity.value,
-  }));
-  // In-panel placeholder fades OUT as the floating button fades in
-  const closetOriginalStyle = useAnimatedStyle(() => ({
-    opacity: 1 - tutorialOpacity.value,
   }));
 
   const locationLabel = displayLocation
@@ -207,15 +196,10 @@ export default function LocationSetScreen() {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <LinearGradient
-            colors={[Colors.surface[100], 'rgba(245,244,244,0)']}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-            style={s.locationPillGradient}
-          >
+          <View style={s.locationPillGradient}>
             <Ionicons name="location-outline" size={12} color={Colors.surface[200]} />
             <Text style={s.locationText} numberOfLines={1}>{locationLabel}</Text>
-          </LinearGradient>
+          </View>
         </Pressable>
 
         {/* ── PFP — top right (Figma 387:134, 34×34) ───────────────── */}
@@ -244,26 +228,14 @@ export default function LocationSetScreen() {
               <Ionicons name="chevron-down" size={10} color={Colors.surface[200]} />
             </Pressable>
 
+            {/* Refresh + outfit-maker buttons — mirrors home (Figma 675:602) */}
             <View style={s.iconGroup}>
               <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)/outfit'); }} hitSlop={4}>
-                <Ionicons name="body-outline" size={19} color={Colors.surface[200]} />
+                <Ionicons name="refresh-outline" size={19} color={Colors.surface[200]} />
               </Pressable>
-              {/* Closet btn placeholder — fades out as tutorial fades in.        */}
-              {/* A floating copy (zIndex 52, outside SkyBackground) takes over. */}
-              <Animated.View style={closetOriginalStyle}>
-                <View
-                  ref={closetPlaceholderRef}
-                  onLayout={() => {
-                    closetPlaceholderRef.current?.measureInWindow((x, y) => {
-                      setClosetPos({ x, y });
-                    });
-                  }}
-                >
-                  <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }} hitSlop={4}>
-                    <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
-                  </Pressable>
-                </View>
-              </Animated.View>
+              <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)/outfit'); }} hitSlop={4}>
+                <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
+              </Pressable>
             </View>
           </View>
 
@@ -360,33 +332,33 @@ export default function LocationSetScreen() {
       {/* ── Nav bar — zIndex 55, above tutorial overlay (50) ────────── */}
       <NavBar activeTab={2} />
 
-      {/* ── Floating closet button ────────────────────────────────────── */}
-      {/* Rendered outside SkyBackground (no overflow:hidden clip).       */}
-      {/* Position mirrors the in-panel placeholder via measureInWindow.  */}
-      {/* zIndex 52 > overlay (50) → only this button is above the dim.  */}
-      {closetPos !== null && (
-        <Animated.View
-          style={[
-            s.floatingCloset,
-            { left: closetPos.x, top: closetPos.y },
-            tutorialFadeStyle,
-            closetScaleStyle,
-          ]}
-        >
-          {/* Glow ring */}
-          <Animated.View
-            style={[StyleSheet.absoluteFill, s.closetRing, closetRingStyle]}
-            pointerEvents="none"
-          />
-          <Pressable
-            style={s.iconBtn}
-            onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
-            hitSlop={4}
-          >
-            <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
-          </Pressable>
-        </Animated.View>
-      )}
+      {/* ── Tutorial camera highlight — Figma 675:602 tutorial frames ─── */}
+      {/* Pulsing white spotlight behind the nav bar's camera slot.        */}
+      {/* zIndex 54 sits above the dim overlay (50) and below NavBar (55). */}
+      <Animated.View
+        style={[
+          s.cameraSpotlight,
+          {
+            left:   screenW / 2 - 22,
+            bottom: insets.bottom + 10 - 0.5,   // centred on the 43px pill
+          },
+          tutorialFadeStyle,
+          closetScaleStyle,
+        ]}
+        pointerEvents="none"
+      />
+
+      {/* During onboarding, the camera slot opens the closet tutorial     */}
+      {/* (Figma 144:68) instead of the quick camera. Transparent overlay  */}
+      {/* exactly over the nav camera section, above NavBar.               */}
+      <Pressable
+        style={[
+          s.cameraSlotPress,
+          { left: screenW / 2 - 25.5, bottom: insets.bottom + 10 },
+        ]}
+        onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
+        accessibilityLabel="Start building your closet"
+      />
 
     </View>
   );
@@ -415,6 +387,7 @@ const s = StyleSheet.create({
 
   // ── Location pill ─────────────────────────────────────────────────────────
   locationPill: { position: 'absolute', left: 20, zIndex: 10 },
+  // Solid surface-100 pill with surface-200 border (glass UI removed)
   locationPillGradient: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -423,7 +396,8 @@ const s = StyleSheet.create({
     paddingVertical:   4,
     borderRadius:      20,
     borderWidth:       1,
-    borderColor:       Colors.surface[100],
+    borderColor:       Colors.surface[200],
+    backgroundColor:   Colors.surface[100],
   },
   locationText: { ...Typography.caption, color: Colors.surface[200] },
 
@@ -609,24 +583,28 @@ const s = StyleSheet.create({
     textAlign:     'center',
     width:         268,
   },
-  // Floating closet button — sibling of SkyBackground, no overflow:hidden clip,
-  // zIndex 52 > overlay (50) so only this element sits above the dim layer.
-  floatingCloset: {
-    position: 'absolute',
-    zIndex:   52,
+  // Tutorial camera spotlight — pulsing white circle behind the nav bar's
+  // camera slot (Figma 675:602 tutorial frames). Nav pill is 153×43 centred;
+  // the camera slot is its middle third → screen-centred 44px circle.
+  cameraSpotlight: {
+    position:        'absolute',
+    width:           44,
+    height:          44,
+    borderRadius:    22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    shadowColor:     '#fff',
+    shadowOffset:    { width: 0, height: 0 },
+    shadowOpacity:   0.9,
+    shadowRadius:    10,
+    zIndex:          54,
   },
-
-  // White glow ring around the closet button (Figma 308:26781)
-  // Opacity is driven by tutorialOpacity (0→1 with the fade)
-  closetRing: {
-    borderRadius:  22,      // iconBtn is 40×40 r:20; ring bleeds 2px outside
-    margin:        -2,
-    borderWidth:   2,
-    borderColor:   'rgba(255,255,255,0.85)',
-    shadowColor:   '#fff',
-    shadowOffset:  { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius:  8,
+  // Transparent pressable over the camera slot — routes to the closet
+  // tutorial during onboarding (zIndex 56 > NavBar 55).
+  cameraSlotPress: {
+    position: 'absolute',
+    width:    51,   // pill 153 / 3
+    height:   43,
+    zIndex:   56,
   },
 
   // ── Hourly scroll (shared cell styles) ───────────────────────────────────

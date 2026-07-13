@@ -7,6 +7,8 @@ export type { ClothingTags };
 
 export type ClothingItem = {
   id: string;
+  /** Custom user-given name (e.g. "FAVE BAND TEE"). Falls back to "TOP#1" style label. */
+  name?: string;
   imageUrl: string;
   /** Supabase Storage path — present for cloud-synced items, undefined for local-only. */
   storagePath?: string;

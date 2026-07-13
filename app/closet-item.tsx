@@ -34,12 +34,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useClosetStore } from '@/store/closetStore';
-import { updateClothingTags, deleteClothingItem, retagClosetItem } from '@/lib/closet';
+import { updateClothingTags, updateClothingName, deleteClothingItem, retagClosetItem } from '@/lib/closet';
 import { parseTags } from '@/lib/claude';
 
 // ─── Figma frame reference (393 × 852) ───────────────────────────────────────
 const FW = 393;
 const FH = 852;
+
+// Every clothing item must carry 1–3 tags
+const MIN_TAGS = 1;
+const MAX_TAGS = 3;
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ClosetItemScreen() {
@@ -60,6 +64,10 @@ export default function ClosetItemScreen() {
   const [deleting,     setDeleting]     = useState(false);
   const [tagging,      setTagging]      = useState(false);
 
+  // ── Rename ──────────────────────────────────────────────────────────────────
+  const [editingName,  setEditingName]  = useState(false);
+  const [nameInput,    setNameInput]    = useState('');
+
   // ── Self-heal: item opened with no tags → auto-tag it right here ───────────
   // (Figma 667:123 always shows suggested tag pills; an empty section means
   // the background migration hasn't reached this item yet.)
@@ -79,22 +87,31 @@ export default function ClosetItemScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
 
+  // 1–3 tags enforced: deselect always allowed, select capped at MAX_TAGS
   const toggleTag = useCallback((tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) return prev.filter((t) => t !== tag);
+      if (prev.length >= MAX_TAGS) return prev;
+      return [...prev, tag];
+    });
   }, []);
 
   const handleAddCustomTag = useCallback(() => {
     const trimmed = customInput.trim().toUpperCase();
     if (!trimmed) return;
-    setSelectedTags((prev) => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+    setSelectedTags((prev) =>
+      prev.includes(trimmed) || prev.length >= MAX_TAGS ? prev : [...prev, trimmed]
+    );
     setCustomInput('');
   }, [customInput]);
 
   // ── Update closet ────────────────────────────────────────────────────────────
   const handleUpdate = useCallback(async () => {
     if (!item || saving) return;
+    if (selectedTags.length < MIN_TAGS) {
+      Alert.alert('Add a tag', 'Every item needs at least one tag (max 3).');
+      return;
+    }
     setSaving(true);
     try {
       await updateClothingTags(item.id, selectedTags);
@@ -150,6 +167,23 @@ export default function ClosetItemScreen() {
     };
     return `${labelMap[item.category] ?? item.category.toUpperCase()}#${idx}`;
   })();
+
+  const displayName = item?.name || itemLabel;
+
+  const startRename = useCallback(() => {
+    setNameInput(item?.name ?? '');
+    setEditingName(true);
+  }, [item?.name]);
+
+  const commitRename = useCallback(() => {
+    setEditingName(false);
+    if (!item) return;
+    const trimmed = nameInput.trim().toUpperCase();
+    if (trimmed === (item.name ?? '')) return;
+    // Empty input clears the custom name → falls back to "TOP#1" label
+    updateItem(item.id, { name: trimmed || undefined });
+    updateClothingName(item.id, trimmed || null); // best-effort cloud sync
+  }, [item, nameInput, updateItem]);
 
   // ── Figma layout values ────────────────────────────────────────────────────
   const gradTop    = sy(46);
@@ -210,10 +244,29 @@ export default function ClosetItemScreen() {
         <Ionicons name="chevron-down" size={18} color={Colors.surface[200]} />
       </Pressable>
 
-      {/* ── Item label "TOP#1" — Figma: top:124, left:~170 ──────────────────── */}
-      <Text style={[s.itemLabel, { top: labelTop, left: labelLeft }]}>
-        {itemLabel}
-      </Text>
+      {/* ── Item label "TOP#1" + rename pencil — Figma 563:162 ──────────────── */}
+      <View style={[s.labelRow, { top: labelTop }]}>
+        {editingName ? (
+          <TextInput
+            style={[s.itemLabel, s.nameInput]}
+            value={nameInput}
+            onChangeText={setNameInput}
+            onSubmitEditing={commitRename}
+            onBlur={commitRename}
+            placeholder={itemLabel}
+            placeholderTextColor={Colors.surface[30]}
+            autoFocus
+            autoCapitalize="characters"
+            returnKeyType="done"
+            maxLength={24}
+          />
+        ) : (
+          <Pressable style={s.labelPress} onPress={startRename} hitSlop={8}>
+            <Text style={s.itemLabel} numberOfLines={1}>{displayName}</Text>
+            <Ionicons name="pencil-outline" size={13} color={Colors.surface[150]} />
+          </Pressable>
+        )}
+      </View>
 
       {/* ── "REMOVE ITEM" — top-right, replaces "RETAKE PHOTO" for closet ────── */}
       <Pressable
@@ -277,10 +330,10 @@ export default function ClosetItemScreen() {
         style={[
           s.updateBtn,
           { top: btnTop, left: btnLeft, width: sx(211) },
-          saving && s.updateBtnLoading,
+          (saving || selectedTags.length < MIN_TAGS) && s.updateBtnLoading,
         ]}
         onPress={handleUpdate}
-        disabled={saving}
+        disabled={saving || selectedTags.length < MIN_TAGS}
       >
         {saving
           ? <ActivityIndicator size="small" color={Colors.surface[100]} />
@@ -304,10 +357,10 @@ const s = StyleSheet.create({
     gap:            16,
   },
 
-  // Photo — absolute, behind the gradient
+  // Photo — absolute, ABOVE the gradient (under it the image looks faded/washed)
   photoBg: {
     position: 'absolute',
-    zIndex:   1,
+    zIndex:   3,
   },
 
   // Gradient overlay
@@ -324,9 +377,28 @@ const s = StyleSheet.create({
     zIndex:   10,
   },
 
+  // Label row — centred, holds name/input + pencil
+  labelRow: {
+    position:       'absolute',
+    left:           0,
+    right:          0,
+    alignItems:     'center',
+    justifyContent: 'center',
+    zIndex:         10,
+  },
+  labelPress: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+    maxWidth:      '80%',
+  },
+  nameInput: {
+    minWidth:  120,
+    textAlign: 'center',
+    padding:   0,
+  },
   // "TOP#1" label — DM Mono 16px -0.8 surface-150
   itemLabel: {
-    position:      'absolute',
     fontFamily:    FontFamily.sans,
     fontSize:      16,
     lineHeight:    20,
@@ -388,10 +460,10 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     color:         Colors.surface[150],
   },
+  // Figma 667:132 — px:16, py:8, r:4, border surface-200 (32px tall)
   tagPill: {
-    height:            24,
-    paddingHorizontal: 14,
-    paddingVertical:   4,
+    paddingHorizontal: 16,
+    paddingVertical:   8,
     borderRadius:      4,
     borderWidth:       1,
     borderColor:       Colors.surface[200],

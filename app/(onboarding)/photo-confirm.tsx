@@ -44,7 +44,8 @@ import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useScanStore, type ScanPhoto } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
-import { tagClothingItemStructured, flattenTags } from '@/lib/claude';
+import { flattenTags } from '@/lib/claude';
+import { tagClothingItemStructured } from '@/lib/gemini';
 import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
 import { supabase } from '@/lib/supabase';
 
@@ -201,7 +202,9 @@ export default function PhotoConfirmScreen() {
 
   // Navigate to main app when all 6 photos confirmed
   useEffect(() => {
-    if (completed) router.replace('/(tabs)');
+    // Onboarding ends on the closet overview (Figma 675:794) so the user
+    // sees the closet they just built.
+    if (completed) router.replace('/(tabs)/closet');
   }, [completed]);
 
   // ── Current category filter ─────────────────────────────────────────────────
@@ -311,10 +314,16 @@ export default function PhotoConfirmScreen() {
       let clothingTags;
       try {
         clothingTags = await tagClothingItemStructured(imageUri, category);
-        tags = Array.from(flattenTags(clothingTags)).filter(Boolean);
+        // Every scanned item carries 1–3 tags
+        tags = Array.from(flattenTags(clothingTags)).filter(Boolean).slice(0, 3);
         updateItem(localId, { tags, clothingTags });
       } catch (err) {
         console.warn('[photo-confirm] auto-tag failed (self-heal will retry):', err);
+      }
+      // Guarantee at least one tag even if auto-tagging failed
+      if (tags.length === 0) {
+        tags = [category.toUpperCase()];
+        updateItem(localId, { tags });
       }
 
       try {
