@@ -12,7 +12,12 @@
 //     user_id      uuid references auth.users(id) on delete cascade not null,
 //     image_url    text not null,
 //     storage_path text not null,
-//     category     text not null check (category in ('top','bottom','shoes','accessory','outerwear')),
+//     category     text not null check (category in ('top','bottom','shoes','accessory','outerwear','jewelry')),
+//
+//   If the table already exists with the old constraint, run:
+//     alter table clothing_items drop constraint clothing_items_category_check;
+//     alter table clothing_items add constraint clothing_items_category_check
+//       check (category in ('top','bottom','shoes','accessory','outerwear','jewelry'));
 //     tags         text[] not null default '{}',
 //     created_at   timestamptz default now() not null
 //   );
@@ -30,6 +35,7 @@ import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 import type { ClothingItem } from '@/store/closetStore';
+import { tagClothingItemStructured, flattenTags, parseTags } from './claude';
 
 const BUCKET = 'closet-images';
 
@@ -119,14 +125,20 @@ export async function fetchClosetItems(userId: string): Promise<ClothingItem[]> 
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id:          row.id          as string,
-    imageUrl:    row.image_url   as string,
-    storagePath: row.storage_path as string,
-    category:    row.category    as ClothingItem['category'],
-    tags:        (row.tags       as string[]) ?? [],
-    createdAt:   row.created_at  as string,
-  }));
+  return (data ?? []).map((row) => {
+    const tags = (row.tags as string[]) ?? [];
+    return {
+      id:           row.id          as string,
+      imageUrl:     row.image_url   as string,
+      storagePath:  row.storage_path as string,
+      category:     row.category    as ClothingItem['category'],
+      tags,
+      // Rebuild structured tags from the flat array so filters work on
+      // cloud-synced items (clothingTags is not stored as its own column).
+      clothingTags: parseTags(tags),
+      createdAt:    row.created_at  as string,
+    };
+  });
 }
 
 // ── Update tags ────────────────────────────────────────────────────────────────
@@ -135,6 +147,10 @@ export async function updateClothingTags(
   itemId: string,
   tags:   string[],
 ): Promise<void> {
+  // Local-only items have non-UUID ids — nothing in the cloud to update.
+  // (Passing them to Postgres throws `invalid input syntax for type uuid`.)
+  if (!UUID_RE.test(itemId)) return;
+
   const { error } = await supabase
     .from('clothing_items')
     .update({ tags })
@@ -143,19 +159,124 @@ export async function updateClothingTags(
   if (error) throw error;
 }
 
+// ── Retag a single item via Claude ────────────────────────────────────────────
+// Calls Claude vision on the item's public Supabase URL, updates DB + returns
+// the new 3-tag array. Safe to call with any imageUrl (https://).
+
+export async function retagClosetItem(
+  item: Pick<ClothingItem, 'id' | 'imageUrl' | 'category'> & Partial<Pick<ClothingItem, 'tags'>>,
+): Promise<string[]> {
+  const category = item.category as 'top' | 'bottom' | 'shoes';
+  // Gracefully skip unsupported categories
+  if (!['top', 'bottom', 'shoes'].includes(category)) return item.id ? [] : [];
+
+  const result = await tagClothingItemStructured(item.imageUrl, category);
+  const tags   = Array.from(flattenTags(result)); // [type, style, colour]
+
+  // Preserve any custom tags the user typed in (anything outside the
+  // canonical TYPE/STYLE/COLOUR vocab and old fallback set).
+  const existing = (item as ClothingItem).tags ?? [];
+  const custom   = existing.filter(
+    (t) => !isVocabTag(t) && !OLD_FALLBACK_TAGS.has(t.toUpperCase()),
+  );
+
+  const merged = [...tags, ...custom];
+  await updateClothingTags(item.id, merged);
+  return merged;
+}
+
+// ── Migrate all items for a user that have 0 tags or old fallback tags ─────────
+// Runs silently in the background — errors per item are swallowed.
+// Returns a map of { itemId → newTags } for the caller to update local state.
+
+const OLD_FALLBACK_TAGS = new Set([
+  'CASUAL','EVERYDAY','LAYERING','DENIM','SNEAKERS','COMFORTABLE',
+]);
+
+// Is this tag part of the canonical filter vocab (TYPE / STYLE / COLOUR)?
+function isVocabTag(tag: string): boolean {
+  const parsed = parseTags([tag]);
+  return parsed !== undefined;
+}
+
+function needsRetag(tags: string[]): boolean {
+  if (tags.length === 0) return true;
+  // All tags are from the old hardcoded fallback set → retag
+  if (tags.every((t) => OLD_FALLBACK_TAGS.has(t))) return true;
+  // Every filterable item needs BOTH a type and a colour from the canonical
+  // vocab (style is a bonus third tag). Missing either → retag so the item
+  // matches type/colour filters. Custom tags are preserved by retagClosetItem.
+  const parsed = parseTags(tags);
+  return !parsed || !parsed.type || !parsed.colour;
+}
+
+export async function migrateClosetTags(
+  items: ClothingItem[],
+): Promise<Record<string, string[]>> {
+  const results: Record<string, string[]> = {};
+  const stale = items.filter(
+    (i) => needsRetag(i.tags) && ['top','bottom','shoes'].includes(i.category),
+  );
+
+  await Promise.allSettled(
+    stale.map(async (item) => {
+      try {
+        const newTags = await retagClosetItem(item);
+        results[item.id] = newTags;
+      } catch {
+        // Silent — old tags stay in place
+      }
+    }),
+  );
+
+  return results;
+}
+
 // ── Delete item ────────────────────────────────────────────────────────────────
 // Removes the DB row first, then the storage file (best-effort).
+//
+// Handles two edge cases that used to make "REMOVE ITEM" appear broken:
+//   1. Local-only items (upload failed at scan time) have non-UUID ids —
+//      passing those to Postgres threw `invalid input syntax for type uuid`.
+//      Now we skip the cloud delete entirely for them.
+//   2. Stale-session deletes: RLS silently blocks the delete (0 rows, no
+//      error), the item disappears locally, then resurrects on next closet
+//      fetch. We now verify the row is actually gone and throw if not.
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function deleteClothingItem(
   itemId:      string,
   storagePath: string | undefined,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('clothing_items')
-    .delete()
-    .eq('id', itemId);
+  // Local-only item — nothing in the cloud to delete.
+  if (UUID_RE.test(itemId)) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      throw new Error('Not signed in — please sign in to remove items.');
+    }
 
-  if (error) throw error;
+    const { data, error } = await supabase
+      .from('clothing_items')
+      .delete()
+      .eq('id', itemId)
+      .select('id');
+
+    if (error) throw error;
+
+    // 0 rows deleted — either already gone (fine) or RLS blocked it.
+    if (!data || data.length === 0) {
+      const { data: still } = await supabase
+        .from('clothing_items')
+        .select('id')
+        .eq('id', itemId)
+        .maybeSingle();
+      if (still) {
+        throw new Error('Could not remove item from cloud — try signing in again.');
+      }
+    }
+  }
 
   if (storagePath) {
     // Don't throw — missing file shouldn't block UI

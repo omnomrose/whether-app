@@ -14,7 +14,7 @@
 //   Tag input:        left:20, top:586, w:353
 //   UPDATE CLOSET:    centred, top:660, w:211
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -34,7 +34,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useClosetStore } from '@/store/closetStore';
-import { updateClothingTags, deleteClothingItem } from '@/lib/closet';
+import { updateClothingTags, deleteClothingItem, retagClosetItem } from '@/lib/closet';
+import { parseTags } from '@/lib/claude';
 
 // ─── Figma frame reference (393 × 852) ───────────────────────────────────────
 const FW = 393;
@@ -57,6 +58,26 @@ export default function ClosetItemScreen() {
   const [customInput,  setCustomInput]  = useState('');
   const [saving,       setSaving]       = useState(false);
   const [deleting,     setDeleting]     = useState(false);
+  const [tagging,      setTagging]      = useState(false);
+
+  // ── Self-heal: item opened with no tags → auto-tag it right here ───────────
+  // (Figma 667:123 always shows suggested tag pills; an empty section means
+  // the background migration hasn't reached this item yet.)
+  useEffect(() => {
+    if (!item || item.tags.length > 0 || tagging) return;
+    let cancelled = false;
+    setTagging(true);
+    retagClosetItem(item)
+      .then((tags) => {
+        if (cancelled || tags.length === 0) return;
+        updateItem(item.id, { tags, clothingTags: parseTags(tags) });
+        setSelectedTags(tags);
+      })
+      .catch((err) => console.warn('[closet-item] auto-tag failed:', err))
+      .finally(() => { if (!cancelled) setTagging(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id]);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) =>
@@ -125,6 +146,7 @@ export default function ClosetItemScreen() {
       shoes:     'SHOES',
       accessory: 'ACCESSORY',
       outerwear: 'OUTERWEAR',
+      jewelry:   'JEWELRY',
     };
     return `${labelMap[item.category] ?? item.category.toUpperCase()}#${idx}`;
   })();
@@ -214,18 +236,25 @@ export default function ClosetItemScreen() {
           <Ionicons name="add" size={10} color={Colors.surface[200]} />
           <Text style={s.tagsSectionLabel}>SUGGESTED TAGS</Text>
         </View>
-        <View style={s.tagsList}>
-          {selectedTags.map((tag) => (
-            <Pressable
-              key={tag}
-              style={[s.tagPill, s.tagPillActive]}
-              onPress={() => toggleTag(tag)}
-              hitSlop={6}
-            >
-              <Text style={[s.tagText, s.tagTextActive]}>{tag}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {tagging ? (
+          <View style={s.taggingRow}>
+            <ActivityIndicator size="small" color={Colors.surface[150]} />
+            <Text style={s.taggingText}>ANALYSING...</Text>
+          </View>
+        ) : (
+          <View style={s.tagsList}>
+            {selectedTags.map((tag) => (
+              <Pressable
+                key={tag}
+                style={[s.tagPill, s.tagPillActive]}
+                onPress={() => toggleTag(tag)}
+                hitSlop={6}
+              >
+                <Text style={[s.tagText, s.tagTextActive]}>{tag}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* "+ ADD TAGS..." input — Figma: top:586, left:20, w:353 */}
@@ -346,6 +375,19 @@ const s = StyleSheet.create({
     gap:           11,
     alignItems:    'center',
   },
+  taggingRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           8,
+  },
+  taggingText: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      12,
+    lineHeight:    16,
+    letterSpacing: -0.18,
+    textTransform: 'uppercase',
+    color:         Colors.surface[150],
+  },
   tagPill: {
     height:            24,
     paddingHorizontal: 14,
@@ -394,11 +436,11 @@ const s = StyleSheet.create({
     color:         Colors.surface[200],
   },
 
-  // UPDATE CLOSET button
+  // UPDATE CLOSET button — Figma 667:142: primary-100 fill, surface-200 text
   updateBtn: {
     position:          'absolute',
     height:            40,
-    backgroundColor:   Colors.surface[200],
+    backgroundColor:   Colors.primary[100],
     borderRadius:      4,
     alignItems:        'center',
     justifyContent:    'center',
@@ -411,7 +453,7 @@ const s = StyleSheet.create({
     lineHeight:    16,
     letterSpacing: -0.18,
     textTransform: 'uppercase',
-    color:         Colors.surface[100],
+    color:         Colors.surface[200],
   },
 
   notFound: {

@@ -5,7 +5,7 @@
 // Key design decisions:
 //  - Card is ALWAYS full-width (left:0, right:0) — only `top` and `maxHeight` morph
 //  - Morph runs on the Reanimated UI thread (withTiming) for a native 60fps feel
-//  - Glass card: pure-RN layered approach (base fill + sheen + shadow) — no native blur needed
+//  - Panel: solid surface-100 card (glass UI removed)
 //  - Header is a solid surface-100 View (no gradient — matches final Figma)
 //  - Location button is ABOVE the search bar (corrected from earlier reversed order)
 //  - Result rows: building icon + highlighted query match + muted remainder
@@ -26,7 +26,6 @@ import {
   NativeScrollEvent,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -266,7 +265,7 @@ export default function LocationScreen() {
   const focusH   = (CARD_H_FOCUS   / FIGMA_H) * screenH;
 
   // ── Reanimated shared values for the morph ──────────────────────────────
-  // `height` (not maxHeight) so the glass panel always fills its designed
+  // `height` (not maxHeight) so the panel always fills its designed
   // Figma footprint — empty space below results is intentional per the design.
   const cardTop = useSharedValue(idleTop);
   const cardH   = useSharedValue(idleH);
@@ -462,25 +461,8 @@ export default function LocationScreen() {
 
       {/* ── Morphing Search Container ─────────────────────────── */}
       <Animated.View style={[s.card, cardStyle]}>
-        {/* ── Pure-RN glass layers (no native blur — BlurView can't blur WebView) */}
-        {/* 1. glass-linear — surface-100 solid at bottom, transparent at top     */}
-        {/*    Same gradient recipe as ClosetTutorialCard for consistent glass fx  */}
-        <LinearGradient
-          colors={['#f5f4f4', 'rgba(245,244,244,0)']}
-          start={{ x: 0, y: 1 }}
-          end={{ x: 0, y: 0 }}
-          style={[StyleSheet.absoluteFill, s.glassBase]}
-        />
-        {/* 2. Specular shine — bright at top, fades to transparent (classic gloss) */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={s.glossShine}
-          pointerEvents="none"
-        />
-        {/* 3. Rim — 1.5 px solid white line catches light at the very top edge  */}
-        <View style={s.glassRim} pointerEvents="none" />
+        {/* Solid surface-100 panel — glass UI removed from the design system */}
+        <View style={[StyleSheet.absoluteFill, s.panelBase]} />
 
         <View style={s.inner}>
 
@@ -496,17 +478,8 @@ export default function LocationScreen() {
               <Text style={s.locationText}>USE CURRENT LOCATION</Text>
             </Pressable>
 
-            {/* 2 — Search bar */}
-            {/* Idle: glass gradient (transparent→solid). Active: solid surface-100. */}
-            <LinearGradient
-              colors={isSearching
-                ? [Colors.surface[100], Colors.surface[100]]
-                : ['rgba(245,244,244,0)', 'rgba(245,244,244,0.44)', Colors.surface[100]]}
-              locations={isSearching ? [0, 1] : [0, 0.245, 1]}
-              start={{ x: 0, y: 1 }}
-              end={{ x: 0, y: 0 }}
-              style={[s.searchBar, isSearching && s.searchBarActive]}
-            >
+            {/* 2 — Search bar — solid surface-100 in both states */}
+            <View style={[s.searchBar, isSearching && s.searchBarActive]}>
               <Image
                 source={require('@/assets/images/icons/icon-search.png')}
                 style={{ width: 13, height: 13, tintColor: isSearching ? Colors.surface[200] : Colors.surface[150] }}
@@ -534,7 +507,7 @@ export default function LocationScreen() {
                   <Ionicons name="close-circle" size={14} color={Colors.surface[150]} />
                 </Pressable>
               ) : null}
-            </LinearGradient>
+            </View>
           </View>
 
           {/* ── Divider ──────────────────────────────────────────── */}
@@ -606,8 +579,8 @@ const s = StyleSheet.create({
   webview: { flex: 1 },
 
   // ── Header — Figma 185:347 ────────────────────────────────────────────────
-  // glass-linear gradient: transparent (top) → solid surface-100 (bottom)
-  // glass-bg radius:12 — simulated with a 3-stop gradient ramp
+  // Solid surface-100 panel (glass UI removed)
+  
   // justify-end: progress + title pin to the opaque bottom of the pane
   // border-b: hairline at the bottom separates header from map
   header: {
@@ -652,29 +625,10 @@ const s = StyleSheet.create({
     shadowRadius:    18,
     elevation:       10,
   },
-  // glass-linear base — gradient handled by LinearGradient in JSX.
-  // borderRadius clips the gradient to the card shape.
-  glassBase: {
-    borderRadius: 16,
-  },
-  // Specular shine — bright white gradient covering top 64 px of the card
-  glossShine: {
-    position: 'absolute',
-    top:      0,
-    left:     0,
-    right:    0,
-    height:   64,
-    zIndex:   1,
-  },
-  // 1.5 px solid white rim — sharpest light catch at the very top edge
-  glassRim: {
-    position:        'absolute',
-    top:             0,
-    left:            0,
-    right:           0,
-    height:          1.5,
-    backgroundColor: 'rgba(255,255,255,1.0)',
-    zIndex:          2,
+  // Solid surface-100 panel base (glass UI removed)
+  panelBase: {
+    borderRadius:    16,
+    backgroundColor: Colors.surface[100],
   },
   // Inner content — Figma padding: px-24, py-12 (idle) / p-24 (focused)
   inner: {
@@ -699,9 +653,8 @@ const s = StyleSheet.create({
   locationText: { ...Typography.caption, color: Colors.surface[150] },
 
   // Search bar
-  // Idle  (Figma 144:56): radius:4, glass gradient bg (bottom→top: transparent→solid)
+  // Idle  (Figma 144:56): radius:4, solid surface-100 bg
   // Active (Figma 335:121): radius:200 pill, solid surface-100 bg
-  // Background handled by LinearGradient in JSX — no backgroundColor here.
   searchBar: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -711,7 +664,8 @@ const s = StyleSheet.create({
     borderRadius:      4,                          // Figma idle: radius-1 = 4
     borderWidth:       1,
     borderColor:       Colors.surface[150],        // #786c6c in both states
-    overflow:          'hidden',                   // clip gradient to rounded corners
+    backgroundColor:   Colors.surface[100],
+    overflow:          'hidden',
   },
   searchBarActive: {
     borderRadius: 200,                             // Figma active: radius-10 = 200 (pill)

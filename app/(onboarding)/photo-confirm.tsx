@@ -44,7 +44,9 @@ import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useScanStore, type ScanPhoto } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
-import { tagClothingItemStructured } from '@/lib/claude';
+import { tagClothingItemStructured, flattenTags } from '@/lib/claude';
+import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
+import { supabase } from '@/lib/supabase';
 
 // ─── Figma frame reference (393 × 852) ────────────────────────────────────────
 const FW = 393;
@@ -195,7 +197,7 @@ export default function PhotoConfirmScreen() {
 
   // ── Stores ──────────────────────────────────────────────────────────────────
   const { photos, completed, confirmToCloset, retakePhoto } = useScanStore();
-  const { addItem, removeItem } = useClosetStore();
+  const { addItem, removeItem, updateItem } = useClosetStore();
 
   // Navigate to main app when all 6 photos confirmed
   useEffect(() => {
@@ -289,39 +291,70 @@ export default function PhotoConfirmScreen() {
     // 1. Mark confirmed immediately (synchronous Zustand update)
     confirmToCloset(activePhoto.id);
 
-    // 2. Auto-tag + persist to closet store in the background
     const imageUri = activePhoto.bgRemovedUri ?? activePhoto.rawUri;
-    tagClothingItemStructured(imageUri, activePhoto.category)
-      .then((clothingTags) => {
+    const localId  = activePhoto.id;
+    const category = activePhoto.category;
+
+    // 2. Add locally right away — closet updates instantly, silently
+    addItem({
+      id:        localId,
+      imageUrl:  imageUri,
+      category,
+      tags:      [],
+      createdAt: new Date().toISOString(),
+    });
+
+    // 3. Background: auto-tag (downscaled) + upload to Supabase + persist.
+    //    Filter tags are stored UPPERCASE to match the filter vocab exactly.
+    (async () => {
+      let tags: string[] = [];
+      let clothingTags;
+      try {
+        clothingTags = await tagClothingItemStructured(imageUri, category);
+        tags = Array.from(flattenTags(clothingTags)).filter(Boolean);
+        updateItem(localId, { tags, clothingTags });
+      } catch (err) {
+        console.warn('[photo-confirm] auto-tag failed (self-heal will retry):', err);
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return; // stay local-only until signed in
+
+        const { publicUrl, storagePath } = await uploadClothingPhoto(
+          imageUri,
+          session.user.id,
+        );
+        const dbId = await saveClothingItem({
+          userId:   session.user.id,
+          imageUrl: publicUrl,
+          storagePath,
+          category,
+          tags,
+        });
+
+        // Swap the local item for its cloud-backed version
+        removeItem(localId);
         addItem({
-          id:          activePhoto.id,
-          imageUrl:    imageUri,
-          category:    activePhoto.category,
+          id:          dbId,
+          imageUrl:    publicUrl,
+          storagePath,
+          category,
+          tags,
           clothingTags,
-          tags:        [clothingTags.type, ...clothingTags.styles, clothingTags.colour]
-                         .map((t) => t.toLowerCase()),
           createdAt:   new Date().toISOString(),
         });
-      })
-      .catch((err) => {
-        // Tagging failed — add item without structured tags so the user
-        // can manually tag from the closet view
-        console.warn('[photo-confirm] auto-tag failed, saving without tags:', err);
-        addItem({
-          id:        activePhoto.id,
-          imageUrl:  imageUri,
-          category:  activePhoto.category,
-          tags:      [],
-          createdAt: new Date().toISOString(),
-        });
-      });
+      } catch (err) {
+        console.warn('[photo-confirm] cloud sync failed, item kept local:', err);
+      }
+    })();
 
-    // 3. Navigate: if this was the last photo, useEffect handles → /(tabs).
+    // 4. Navigate: if this was the last photo, useEffect handles → /(tabs).
     //    Otherwise go back to camera for the next step.
     if (!useScanStore.getState().completed) {
       router.back();
     }
-  }, [activePhoto, confirmToCloset, addItem]);
+  }, [activePhoto, confirmToCloset, addItem, removeItem, updateItem]);
 
   // ── renderItem ──────────────────────────────────────────────────────────────
   const renderItem = useCallback(

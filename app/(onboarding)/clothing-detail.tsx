@@ -43,17 +43,17 @@ import { useScanStore, type ScanCategory } from '@/store/scanStore';
 import { useClosetStore } from '@/store/closetStore';
 import { supabase } from '@/lib/supabase';
 import { uploadClothingPhoto, saveClothingItem } from '@/lib/closet';
-import { tagClothingItemStructured } from '@/lib/claude';
+import { tagClothingItemStructured, flattenTags } from '@/lib/claude';
 
 // ─── Figma frame reference ─────────────────────────────────────────────────────
 const FW = 393;
 const FH = 852;
 
-// ─── Fallback tags if Claude is unavailable ────────────────────────────────────
-const FALLBACK_TAGS: Record<ScanCategory, string[]> = {
-  top:    ['CASUAL', 'EVERYDAY', 'LAYERING'],
-  bottom: ['DENIM', 'CASUAL', 'EVERYDAY'],
-  shoes:  ['SNEAKERS', 'CASUAL', 'COMFORTABLE'],
+// ─── Fallback tags (type, style, colour) if Claude is unavailable ─────────────
+const FALLBACK_TAGS: Record<ScanCategory, [string, string, string]> = {
+  top:    ['T-SHIRT', 'CASUAL', 'WHITE'],
+  bottom: ['JEANS',   'CASUAL', 'BLACK'],
+  shoes:  ['SNEAKERS','CASUAL', 'WHITE'],
 };
 
 export default function ClothingDetailScreen() {
@@ -89,16 +89,17 @@ export default function ClothingDetailScreen() {
         const uri = photo.bgRemovedUri ?? photo.rawUri;
         const result = await tagClothingItemStructured(uri, photo.category as 'top' | 'bottom' | 'shoes');
         if (cancelled) return;
-        // Flatten structured tags into a string array: [type, ...styles, colour]
-        const flat = [result.type, ...result.styles, result.colour].filter(Boolean);
+        // Exactly 3 tags: [type, style, colour]
+        const flat = flattenTags(result);
         setAllTags(flat);
-        setSelectedTags(flat); // pre-select all AI-generated tags
+        // Pre-select only the first tag (type), matching Figma design
+        setSelectedTags([flat[0]]);
       } catch (err) {
         if (cancelled) return;
         console.warn('[clothing-detail] auto-tag failed, using fallback:', err);
-        const fallback = FALLBACK_TAGS[photo.category] ?? [];
+        const fallback = FALLBACK_TAGS[photo.category] ?? FALLBACK_TAGS.top;
         setAllTags(fallback);
-        setSelectedTags(fallback);
+        setSelectedTags([fallback[0]]);
       } finally {
         if (!cancelled) setTagsLoading(false);
       }
@@ -200,7 +201,8 @@ export default function ClothingDetailScreen() {
   const photoLeft  = sx(42);
   const photoTop   = sy(111);
   const photoSize  = sx(309);
-  const labelLeft  = sx(151);
+  // Figma: left:calc(33.33%+40px) ≈ 171px on 393 reference
+  const labelLeft  = sw * 0.3333 + 40;
   const labelTop   = sy(124);
   const retakeTop  = sy(62) + insets.top;
   const retakeLeft = sx(284);
@@ -268,10 +270,11 @@ export default function ClothingDetailScreen() {
         <Text style={s.retakeText}>RETAKE PHOTO</Text>
       </Pressable>
 
-      {/* ── Item label "TOP#1" (Figma 144:255: top:124, left≈151) ─────────── */}
-      <Text style={[s.itemLabel, { top: labelTop, left: labelLeft }]}>
-        {itemLabel}
-      </Text>
+      {/* ── Item label "TOP#1" + edit icon (Figma 144:255, 563:162) ─────────── */}
+      <View style={[s.labelRow, { top: labelTop + insets.top, left: labelLeft }]}>
+        <Text style={s.itemLabel}>{itemLabel}</Text>
+        <Ionicons name="create-outline" size={13} color={Colors.surface[150]} />
+      </View>
 
       {/* ── Tags + Input + Button ────────────────────────────────────────── */}
       <View style={[s.tagsSection, { top: tagsTop, left: sx(21), width: sx(314) }]}>
@@ -397,16 +400,21 @@ const s = StyleSheet.create({
     color:         Colors.surface[200],
   },
 
-  // Item label "TOP#1"
-  itemLabel: {
+  // Item label row: "TOP#1 ✏" — absolutely positioned, flex row
+  labelRow: {
     position:      'absolute',
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+    zIndex:        10,
+  },
+  itemLabel: {
     fontFamily:    FontFamily.sans,
     fontSize:      16,
     lineHeight:    20,
     letterSpacing: -0.8,
     textTransform: 'uppercase',
     color:         Colors.surface[150],
-    zIndex:        3,
   },
 
   // Tags section
@@ -495,12 +503,12 @@ const s = StyleSheet.create({
     color:         Colors.surface[200],
   },
 
-  // UPDATE CLOSET button (dark pill)
+  // UPDATE CLOSET button — Figma 667:142: primary-100 fill, surface-200 text
   updateBtn: {
     position:          'absolute',
     height:            40,
-    backgroundColor:   Colors.surface[200],
-    borderRadius:      40,
+    backgroundColor:   Colors.primary[100],
+    borderRadius:      4,
     alignItems:        'center',
     justifyContent:    'center',
     zIndex:            5,
@@ -512,7 +520,7 @@ const s = StyleSheet.create({
     lineHeight:    16,
     letterSpacing: -0.18,
     textTransform: 'uppercase',
-    color:         Colors.surface[100],
+    color:         Colors.surface[200],
   },
 
   // Error / empty states

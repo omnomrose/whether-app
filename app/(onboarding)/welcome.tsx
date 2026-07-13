@@ -8,7 +8,7 @@
  *   y=607   SIGN UP pill   (w=231, py=12, radius=36, bg=surface-100)
  *   y=670   — OR — divider (w=354, lines + label, gap=7)
  *   y=704   "SIGN IN USING" caption
- *   y=738   quick-logins row: 3 × 52px glass circles, w=231, justify-between
+ *   y=738   quick-logins row: 3 × 52px icon circles, w=231, justify-between
  */
 
 import { useState } from 'react';
@@ -27,7 +27,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { LinearGradient } from 'expo-linear-gradient';
 import AuthBackground from '@/components/AuthBackground';
 import { GoogleIcon, AppleIcon, MailIcon } from '@/components/SocialIcons';
 import { Colors } from '@/constants/Colors';
@@ -169,9 +168,9 @@ export default function WelcomeScreen() {
               style={({ pressed }) => [pressed && styles.dimmed]}
               accessibilityLabel="Sign in with Google"
             >
-              <GlassCircle>
+              <IconCircle>
                 <GoogleIcon size={20} />
-              </GlassCircle>
+              </IconCircle>
             </Pressable>
 
             {/* Apple — 409:78 */}
@@ -180,9 +179,9 @@ export default function WelcomeScreen() {
               style={({ pressed }) => [pressed && styles.dimmed]}
               accessibilityLabel="Sign in with Apple"
             >
-              <GlassCircle>
+              <IconCircle>
                 <AppleIcon />
-              </GlassCircle>
+              </IconCircle>
             </Pressable>
 
             {/* Mail — 409:80 */}
@@ -191,9 +190,9 @@ export default function WelcomeScreen() {
               style={({ pressed }) => [pressed && styles.dimmed]}
               accessibilityLabel="Sign in with email"
             >
-              <GlassCircle>
+              <IconCircle>
                 <MailIcon />
-              </GlassCircle>
+              </IconCircle>
             </Pressable>
 
           </View>
@@ -250,22 +249,12 @@ export default function WelcomeScreen() {
   );
 }
 
-// ── GlassCircle ──────────────────────────────────────────────────────────────
-// Figma annotation "use glass effect" on node 409:80 (applies to all 3 icons).
-// Uses glass-linear token: top-heavy white gradient over the blue background.
-// LinearGradient is consistent on both iOS and Android (BlurView tints vary).
-function GlassCircle({ children }: { children: React.ReactNode }) {
+// ── IconCircle ───────────────────────────────────────────────────────────────
+// Solid surface-100 circle (glass UI removed from the design system).
+function IconCircle({ children }: { children: React.ReactNode }) {
   return (
-    <View style={styles.glassOuter}>
-      <LinearGradient
-        // glass-linear adapted for circles: opaque-ish white at top → translucent at bottom
-        colors={['rgba(245,244,244,0.55)', 'rgba(245,244,244,0.22)']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.glassInner}
-      >
-        {children}
-      </LinearGradient>
+    <View style={styles.iconCircle}>
+      {children}
     </View>
   );
 }
@@ -368,20 +357,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-  // ── Glass circle — node 409:77/78/80 ─────────────────────────────────────
-  // 52×52, radius=26, border rgba(f5f4f4, 0.45), overflow hidden clips gradient
-  glassOuter: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(245,244,244,0.45)',
-  },
-  glassInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // ── Icon circle — node 409:77/78/80 (solid, no glass) ────────────────────
+  iconCircle: {
+    width:           52,
+    height:          52,
+    borderRadius:    26,
+    borderWidth:     1,
+    borderColor:     Colors.surface[200],
+    backgroundColor: Colors.surface[100],
+    alignItems:      'center',
+    justifyContent:  'center',
   },
 
   dimmed: { opacity: 0.7 },

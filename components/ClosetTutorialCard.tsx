@@ -10,7 +10,6 @@
  */
 
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
@@ -72,13 +71,8 @@ interface Props {
 
 export default function ClosetTutorialCard({ onConfirm }: Props) {
   return (
-    // glass-linear: surface-100 at bottom fading to transparent at top
-    <LinearGradient
-      colors={[Colors.surface[100], 'rgba(245,244,244,0)']}
-      start={{ x: 0, y: 1 }}
-      end={{ x: 0, y: 0 }}
-      style={s.card}
-    >
+    // Solid surface-100 card (glass UI removed from the design system)
+    <View style={s.card}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -111,7 +105,7 @@ export default function ClosetTutorialCard({ onConfirm }: Props) {
           <Text style={s.ctaText}>OKAY, GOT IT</Text>
         </Pressable>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -119,13 +113,14 @@ export default function ClosetTutorialCard({ onConfirm }: Props) {
 // All dimensions from Figma node 327:111 (393 × 852 frame).
 
 const s = StyleSheet.create({
-  // glass-linear gradient card — radius 32, border surface-100
+  // Solid surface-100 card — radius 32 (glass UI removed)
   card: {
-    flex:         1,
-    borderRadius: 32,
-    borderWidth:  1,
-    borderColor:  Colors.surface[100],
-    overflow:     'hidden',
+    flex:            1,
+    borderRadius:    32,
+    borderWidth:     1,
+    borderColor:     Colors.surface[100],
+    backgroundColor: Colors.surface[100],
+    overflow:        'hidden',
   },
 
   // ScrollView content — padding 24, gap 44 between header/sections/button

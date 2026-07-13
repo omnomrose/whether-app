@@ -12,7 +12,7 @@ export const Colors = {
   },
   primary: {
     10: 'transparent',
-    100: '#b3ccf0',
+    100: '#b0dcf7',  // Figma variable colours/primary/primary-100
     200: '#6b9fd4',
     300: '#3b82f6',
   },

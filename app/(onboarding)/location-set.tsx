@@ -5,10 +5,10 @@
 //  • Sky gradient + parallax cloud via SkyBackground
 //  • Location pill: tap → go back to change city
 //  • Temperature: DM Sans 70px  •  Wind: "1.5 KM/H — CLEAR" format
-//  • "IT FEELS" box: glass card with sky-gradient placeholder (stock video TBD)
+//  • "IT FEELS" box: solid card with hourly scroll
 //  • Feels-like caption: short phrase from feelsLike + windSpeed
 //  • "[Name]" from onboarding name step (weatherStore.userName)
-//  • Glass effect (expo-blur BlurView, intensity 80, tint "light") on weather card
+//  • Weather card: solid surface-100, 1px surface-200 border (glass UI removed)
 //  • Hourly scroll: all available 3-hour forecast slots, Figma-exported icons
 //  • Tutorial overlay (Figma 308:26722 + 308:26781):
 //      – After 50 s idle → fade in dim overlay + hint text over 20 s
@@ -33,13 +33,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import SkyBackground from '@/components/SkyBackground';
 import WeatherIcon from '@/components/WeatherIcon';
-import GlassNavBar from '@/components/GlassNavBar';
+import NavBar from '@/components/NavBar';
 import { Colors } from '@/constants/Colors';
 import { Typography, FontFamily } from '@/constants/Typography';
 import { useWeatherStore, type HourlyItem } from '@/store/weatherStore';
@@ -227,8 +226,8 @@ export default function LocationSetScreen() {
         {/* ── Heading ───────────────────────────────────────────────── */}
         <Text style={[s.heading, { top: headingTop }]}>{heading}</Text>
 
-        {/* ── Bottom panel: fade → glass card ───────────────────────── */}
-        {/* Extra bottom padding reserves space for GlassNavBar           */}
+        {/* ── Bottom panel ─────────────────────────────────────────── */}
+        {/* Extra bottom padding reserves space for NavBar           */}
         <LinearGradient
           colors={['rgba(245,244,244,0)', Colors.surface[100], Colors.surface[100]]}
           locations={[0, 0.22, 1]}
@@ -287,32 +286,11 @@ export default function LocationSetScreen() {
             </View>
           )}
 
-          {/* ── Weather card (glass) ─────────────────────────────────── */}
+          {/* ── Weather card — solid surface-100, design-system border ── */}
           {weather && !loading && (
             <>
-              <BlurView
-                intensity={80}
-                tint="light"
-                style={s.glassCard}
-              >
-                {/* Glass rim — solid white 1.5px line at the very top, simulates light hitting the edge */}
-                <View style={s.glassRim} pointerEvents="none" />
-
-                {/* Gloss gradient — bright specular at top fading to transparent, the core of the glassy look */}
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.65)', 'rgba(255,255,255,0)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={s.glossShine}
-                  pointerEvents="none"
-                />
-
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.68)', 'rgba(255,255,255,0.36)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={s.cardInner}
-                >
+              <View style={s.weatherCard}>
+                <View style={s.cardInner}>
 
                   {/* Left — IT'S CURRENTLY */}
                   <View style={s.weatherLeft}>
@@ -350,8 +328,8 @@ export default function LocationSetScreen() {
                     </Text>
                   </View>
 
-                </LinearGradient>
-              </BlurView>
+                </View>
+              </View>
 
               {/* Hourly scroll is now inside the IT FEELS right column */}
             </>
@@ -379,8 +357,8 @@ export default function LocationSetScreen() {
 
       </SkyBackground>
 
-      {/* ── Glass nav bar — zIndex 55, above tutorial overlay (50) ───── */}
-      <GlassNavBar activeTab={2} />
+      {/* ── Nav bar — zIndex 55, above tutorial overlay (50) ────────── */}
+      <NavBar activeTab={2} />
 
       {/* ── Floating closet button ────────────────────────────────────── */}
       {/* Rendered outside SkyBackground (no overflow:hidden clip).       */}
@@ -514,44 +492,24 @@ const s = StyleSheet.create({
     marginBottom:   12,
   },
 
-  // ── Glass weather card ────────────────────────────────────────────────────
-  // Figma: glass-bg effect (type GLASS, radius 12), border surface-100, radius 20
-  // Gloss recipe: intensity-80 blur + glossShine gradient + bright rim + white-gradient inner.
-  glassCard: {
-    borderRadius:  20,
-    overflow:      'hidden',
-    marginBottom:  16,
-    // Bright border — crisp specular edge around the whole card
-    borderWidth:   1,
-    borderColor:   'rgba(255,255,255,0.85)',
-    // Soft depth shadow
-    shadowColor:    '#000',
-    shadowOffset:   { width: 0, height: 4 },
-    shadowOpacity:  0.10,
-    shadowRadius:   16,
-    elevation:      6,
-  },
-  // Solid white 1.5px line — sharpest light catch at the very top edge
-  glassRim: {
-    position:        'absolute',
-    top:             0, left: 0, right: 0,
-    height:          1.5,
-    backgroundColor: 'rgba(255,255,255,1.0)',
-    zIndex:          2,
-  },
-  // Full-card specular shine: bright at top, invisible at bottom (classic gloss)
-  glossShine: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 64,
-    zIndex: 1,
+  // ── Weather card — solid surface-100, 1px surface-200 border (no glass) ──
+  weatherCard: {
+    borderRadius:    8,
+    overflow:        'hidden',
+    marginBottom:    16,
+    borderWidth:     1,
+    borderColor:     Colors.surface[200],
+    backgroundColor: Colors.surface[100],
+    shadowColor:     '#1D1D1D',
+    shadowOffset:    { width: 0, height: 13 },
+    shadowOpacity:   0.05,
+    shadowRadius:    14,
+    elevation:       6,
   },
   cardInner: {
     flexDirection: 'row',
     padding:       20,
     gap:           16,
-    zIndex:        1,
-    // backgroundColor intentionally absent — LinearGradient handles the tint
   },
 
   // Left column

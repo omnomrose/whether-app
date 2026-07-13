@@ -1,6 +1,6 @@
 import { View, StyleSheet } from 'react-native';
 import { Tabs, useSegments } from 'expo-router';
-import GlassNavBar from '@/components/GlassNavBar';
+import NavBar from '@/components/NavBar';
 
 export default function TabsLayout() {
   // Determine active tab index from path segments.
@@ -13,21 +13,21 @@ export default function TabsLayout() {
 
   return (
     <View style={s.root}>
-      {/* Default tab bar hidden — GlassNavBar provides navigation instead */}
+      {/* Default tab bar hidden — NavBar provides navigation instead */}
       <Tabs
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: 'none' },
         }}
       >
-        {/* Order matches GlassNavBar left→right: closet, outfit, index (home) */}
+        {/* Order matches NavBar left→right: closet, outfit, index (home) */}
         <Tabs.Screen name="closet" />
         <Tabs.Screen name="outfit" />
         <Tabs.Screen name="index"  />
       </Tabs>
 
-      {/* Floating glass nav bar — absolute, zIndex 55, above all screen content */}
-      <GlassNavBar activeTab={activeTab} />
+      {/* Floating nav bar — absolute, zIndex 55, above all screen content */}
+      <NavBar activeTab={activeTab} />
     </View>
   );
 }

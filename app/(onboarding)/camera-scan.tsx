@@ -40,6 +40,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import SkyBackground from '@/components/SkyBackground';
@@ -182,7 +183,7 @@ export default function CameraScanScreen() {
   // ── Local camera state ─────────────────────────────────────────────────────
   const [capturing,     setCapturing]     = useState(false);
   const [flashMode,     setFlashMode]     = useState<'off' | 'on'>('off');
-  const [zoom,          setZoom]          = useState(ZOOM_LEVELS[DEFAULT_ZOOM_IDX].value);
+  const [zoom,          setZoom]          = useState<number>(ZOOM_LEVELS[DEFAULT_ZOOM_IDX].value);
   const [autofocusMode, setAutofocusMode] = useState<'on' | 'off'>('off');
   const [activeZoomIdx, setActiveZoomIdx] = useState(DEFAULT_ZOOM_IDX);
 
@@ -247,7 +248,7 @@ export default function CameraScanScreen() {
   }, []);
 
   // ── Pinch-to-zoom ──────────────────────────────────────────────────────────
-  const zoomRef           = useRef(ZOOM_LEVELS[DEFAULT_ZOOM_IDX].value);
+  const zoomRef           = useRef<number>(ZOOM_LEVELS[DEFAULT_ZOOM_IDX].value);
   const prevDistRef       = useRef(0);
   const lastZoomUpdateRef = useRef(0);
 
@@ -343,6 +344,34 @@ export default function CameraScanScreen() {
     }
   }, [capturing, allCaptured, addCapture, setBgRemoved, setBgError, setProcessing]);
 
+  // ── Upload from library — Figma 675:1041: routes through the same
+  // capture → bg-removal → photo-confirm flow as the shutter.
+  const handlePickFromLibrary = useCallback(async () => {
+    if (capturing || allCaptured) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality:    0.85,
+    });
+    const uri = result.assets?.[0]?.uri;
+    if (result.canceled || !uri) return;
+
+    const photoId = addCapture(uri);
+    router.push('/(onboarding)/photo-confirm');
+
+    removeBackground(uri)
+      .then((bgUri) => {
+        setBgRemoved(photoId, bgUri);
+        setBgError(photoId, null);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[camera-scan] removeBackground failed:', msg);
+        setBgRemoved(photoId, null);
+        setBgError(photoId, msg);
+      })
+      .finally(() => setProcessing(photoId, false));
+  }, [capturing, allCaptured, addCapture, setBgRemoved, setBgError, setProcessing]);
+
   // ── Tap-to-focus ────────────────────────────────────────────────────────────
   const handleCameraTap = useCallback((locationX: number, locationY: number) => {
     if (capturing || allCaptured) return;
@@ -376,12 +405,6 @@ export default function CameraScanScreen() {
   // ── Current step ───────────────────────────────────────────────────────────
   const safeStep    = Math.min(stepIndex, SCAN_STEPS.length - 1);
   const currentStep = SCAN_STEPS[safeStep];
-
-  // Progress dots — show only dots for current category
-  const allInCategory   = SCAN_STEPS.map((s, i) => ({ ...s, i })).filter((s) => s.category === currentStep.category);
-  const categoryStart   = allInCategory[0]?.i ?? 0;
-  const indexInCategory = safeStep - categoryStart;
-  const totalInCategory = allInCategory.length;
 
   // ─── Permission request ────────────────────────────────────────────────────
   if (!permission) return <View style={s.root} />;
@@ -434,36 +457,29 @@ export default function CameraScanScreen() {
     // paddingTop: insets.top shifts all content below the notch/dynamic island
     <View style={[s.root, { paddingTop: insets.top }]} {...pinchResponder.panHandlers}>
 
-      {/* ── Prompt text — Figma node 144:100: left:20, top:68, w:169 */}
-      {/* left + width are fixed pt (not scaled) so the line break always  */}
-      {/* falls at "IN / YOUR ROTATION" regardless of screen width.        */}
-      {/* top scales with screen height to stay in the dark header strip.  */}
-      <Text style={[s.prompt, { top: sy(68), left: 20, width: 169 }]}>
-        {allCaptured ? 'TAP YOUR PHOTOS TO REVIEW' : currentStep.prompt}
-      </Text>
+      {/* ── BACK link — Figma 675:418: left:20, top:85, chevron + "back" ── */}
+      <Pressable
+        style={[s.backBtn, { top: sy(85), left: 20 }]}
+        onPress={() => router.back()}
+        hitSlop={12}
+      >
+        <Ionicons name="chevron-back" size={14} color={Colors.surface[100]} />
+        <Text style={s.backText}>BACK</Text>
+      </Pressable>
 
-      {/* ── Progress dots — Figma node 392:142: top:77, right:20 (fixed grid margin) */}
-      {!allCaptured && (
-        <View style={[s.dotsRow, { top: sy(77), right: 20 }]}>
-          {Array.from({ length: totalInCategory }).map((_, i) => {
-            const complete = i < indexInCategory;
-            const active   = i === indexInCategory;
-            return (
-              <View
-                key={i}
-                style={[
-                  s.dot,
-                  complete ? s.dotComplete : active ? s.dotActive : s.dotFuture,
-                ]}
-              >
-                {complete && (
-                  <Ionicons name="checkmark" size={10} color={Colors.surface[200]} />
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+      {/* ── Flash toggle — Figma 675:1047: top:85, right:20 ─────────────── */}
+      <Pressable
+        style={[s.flashBtn, { top: sy(85), right: 20 }]}
+        onPress={() => setFlashMode((m) => (m === 'off' ? 'on' : 'off'))}
+        hitSlop={14}
+        accessibilityLabel={flashMode === 'off' ? 'Turn flash on' : 'Turn flash off'}
+      >
+        <Ionicons
+          name={flashMode === 'on' ? 'flash' : 'flash-off'}
+          size={22}
+          color={flashMode === 'on' ? '#f5d050' : 'rgba(245,244,244,0.55)'}
+        />
+      </Pressable>
 
       {/* ── Camera card — rounded, contained viewfinder */}
       {/* Figma: left:20, top:124, w:353, h:601, r:16 */}
@@ -559,18 +575,15 @@ export default function CameraScanScreen() {
 
       {/* ════════ CONTROLS BELOW CARD (on dark bg) ════════ */}
 
-      {/* ── Flash toggle — Figma: left:20, top:770, size:37 */}
+      {/* ── Upload from library — Figma 675:1041: bottom-left ─────────── */}
       <Pressable
-        style={[s.flashBtn, { left: sx(FLASH_L), top: flashTop }]}
-        onPress={() => setFlashMode((m) => (m === 'off' ? 'on' : 'off'))}
+        style={[s.uploadBtn, { left: sx(FLASH_L), top: flashTop }]}
+        onPress={handlePickFromLibrary}
         hitSlop={14}
-        accessibilityLabel={flashMode === 'off' ? 'Turn flash on' : 'Turn flash off'}
+        disabled={capturing || allCaptured}
+        accessibilityLabel="Upload a photo from your library"
       >
-        <Ionicons
-          name={flashMode === 'on' ? 'flash' : 'flash-off'}
-          size={24}
-          color={flashMode === 'on' ? '#f5d050' : 'rgba(245,244,244,0.55)'}
-        />
+        <Ionicons name="push-outline" size={24} color="rgba(245,244,244,0.85)" />
       </Pressable>
 
       {/* ── Shutter — Figma: centred H, top:752, outer:72 inner:57 */}
@@ -663,47 +676,31 @@ const s = StyleSheet.create({
   // Root — Figma background: surface-200 (#2b1e1e), dark warm brown
   root: { flex: 1, backgroundColor: Colors.surface[200] },
 
-  // ── Prompt text — surface-100 on dark bg (Figma: 14/18px uppercase)
-  prompt: {
+  // ── BACK link — Figma 675:418: chevron + "back", surface-100 14px
+  backBtn: {
     position:      'absolute',
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           12,
+    zIndex:        10,
+  },
+  backText: {
     fontFamily:    FontFamily.sans,
     fontSize:      14,
     lineHeight:    18,
     letterSpacing: -0.28,
     textTransform: 'uppercase',
     color:         Colors.surface[100],
-    zIndex:        10,
   },
 
-  // ── Progress dots — three 18×18 circles, right-aligned
-  // Figma node 392:142: w:70, h:18 → 3×18 + 2×8 = 70px ✓
-  dotsRow: {
-    position:      'absolute',
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           8,
-    zIndex:        10,
-  },
-  dot: {
-    width:          18,
-    height:         18,
-    borderRadius:   9,
+  // ── Upload-from-library button — Figma 675:1041: bottom-left
+  uploadBtn: {
+    position:       'absolute',
+    width:          37,
+    height:         37,
     alignItems:     'center',
     justifyContent: 'center',
-  },
-  // Completed: filled surface-100 circle with surface-200 checkmark
-  dotComplete: { backgroundColor: Colors.surface[100] },
-  // Active: outlined surface-100 circle, no fill
-  dotActive:   {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(245,244,244,0.85)',
-  },
-  // Future: dim outlined circle
-  dotFuture:   {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(245,244,244,0.30)',
+    zIndex:         10,
   },
 
   // ── Camera card — rounded, contained viewfinder (Figma: r:16)
@@ -746,13 +743,13 @@ const s = StyleSheet.create({
     borderColor:       BRACKET_COLOR,
   },
 
-  // ── Hint pill — Figma node 392:139, glass-frost effect (radius:100)
-  // Over the dark camera feed the glass appears as a dark frosted overlay.
-  // bg = dark semi-transparent (simulates glass-frost), text = surface-100 (light).
+  // ── Hint pill — Figma node 675:411 (semi-transparent scrim over camera feed)
+  
+  // bg = dark semi-transparent scrim, text = surface-100 (light).
   // Figma: px:44, py:8, r:24. Caption-2: DM Mono 10px uppercase.
   hintPill: {
     position:          'absolute',
-    backgroundColor:   'rgba(43,30,30,0.58)',    // glass-frost over dark camera feed
+    backgroundColor:   'rgba(43,30,30,0.58)',    // dark scrim over camera feed
     borderRadius:      24,
     paddingHorizontal: 44,                        // Figma: px-[44px]
     paddingVertical:   8,
@@ -760,7 +757,7 @@ const s = StyleSheet.create({
     justifyContent:    'center',
     zIndex:            10,
     borderWidth:       StyleSheet.hairlineWidth,
-    borderColor:       'rgba(245,244,244,0.12)',  // subtle frost rim
+    borderColor:       'rgba(245,244,244,0.12)',  // subtle rim
   },
   hintText: {
     fontFamily:    FontFamily.sans,
@@ -769,7 +766,7 @@ const s = StyleSheet.create({
     letterSpacing: -0.15,
     textTransform: 'uppercase',
     textAlign:     'center',
-    color:         Colors.surface[100],           // #f5f4f4 — light on dark glass
+    color:         Colors.surface[100],           // #f5f4f4 — light on dark scrim
   },
 
   // ── Flash toggle button

@@ -5,7 +5,7 @@
  *   y=125  "verify your email" title
  *   y=153  cloud (absolute, via AuthBackground)
  *   y=473  6 OTP digit boxes (w≈47, h=70, gap=14, radius=8)
- *            Each box: glass gradient — #f5f4f4 at top → rgba(f5f4f4,0.44) at 24.5% → transparent at bottom
+ *            Each box: solid surface-100 fill (glass UI removed)
  *   y=571  "RESEND CODE" label
  *
  * Auto-advances focus on digit entry. Auto-verifies when all 6 are filled.
@@ -23,7 +23,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import AuthBackground from '@/components/AuthBackground';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
@@ -133,7 +132,7 @@ export default function VerifyEmailScreen() {
         {/* ── OTP boxes — positioned proportionally from Figma y=473 ─── */}
         <View style={[styles.otpRow, { marginTop: otpTop - titleTop - 28, gap: otpGap }]}>
           {digits.map((digit, i) => (
-            <GlassBox
+            <OtpBox
               key={i}
               width={otpBoxW}
               height={otpBoxH}
@@ -163,12 +162,11 @@ export default function VerifyEmailScreen() {
   );
 }
 
-// ── GlassBox ─────────────────────────────────────────────────────────────────
-// Individual OTP digit cell.
-// Figma: gradient bg (#f5f4f4 top → rgba(f5f4f4,0.44) at 24.5% → transparent bottom)
-//        radius=8, w≈47, h=70
+// ── OtpBox ───────────────────────────────────────────────────────────────────
+// Individual OTP digit cell — solid surface-100 (glass UI removed).
+// radius=8, w≈47, h=70
 
-interface GlassBoxProps {
+interface OtpBoxProps {
   width: number;
   height: number;
   value: string;
@@ -180,16 +178,9 @@ interface GlassBoxProps {
   onFocus: () => void;
 }
 
-function GlassBox({ width, height, value, loading, onRef, onChange, onKeyPress, onFocus }: GlassBoxProps) {
+function OtpBox({ width, height, value, loading, onRef, onChange, onKeyPress, onFocus }: OtpBoxProps) {
   return (
-    // Figma gradient: gradient-to-t (bottom→top) transparent → 0.44 white → opaque white
-    <LinearGradient
-      colors={['rgba(245,244,244,0)', 'rgba(245,244,244,0.44)', '#f5f4f4']}
-      locations={[0, 0.24519, 1]}
-      start={{ x: 0, y: 1 }}   // start at bottom
-      end={{ x: 0, y: 0 }}     // end at top
-      style={[styles.glassBox, { width, height, borderRadius: 8 }]}
-    >
+    <View style={[styles.otpBox, { width, height, borderRadius: 8 }]}>
       <TextInput
         ref={onRef}
         style={[
@@ -207,7 +198,7 @@ function GlassBox({ width, height, value, loading, onRef, onChange, onKeyPress, 
         caretHidden
         selectTextOnFocus
       />
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -235,14 +226,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-  // Glass box container (LinearGradient fills this)
-  glassBox: {
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
+  // OTP digit box — solid surface-100 (glass UI removed)
+  otpBox: {
+    overflow:        'hidden',
+    justifyContent:  'center',
+    alignItems:      'center',
+    backgroundColor: Colors.surface[100],
   },
 
-  // Digit text input — transparent bg (gradient shows through)
+  // Digit text input — transparent bg (box fill shows through)
   digitInput: {
     backgroundColor: 'transparent',
     color: Colors.surface[200],

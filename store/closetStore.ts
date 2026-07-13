@@ -10,7 +10,7 @@ export type ClothingItem = {
   imageUrl: string;
   /** Supabase Storage path — present for cloud-synced items, undefined for local-only. */
   storagePath?: string;
-  category: "top" | "bottom" | "shoes" | "accessory" | "outerwear";
+  category: "top" | "bottom" | "shoes" | "accessory" | "outerwear" | "jewelry";
   /** Structured tags from auto-tagger (type, styles, colour). Editable from closet view. */
   clothingTags?: ClothingTags;
   /** Flat tag array for Claude outfit recommendation prompts. */

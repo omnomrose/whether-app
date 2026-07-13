@@ -6,14 +6,14 @@
 //   Category title:   centred, top:83, Hedvig Letters Serif 24px
 //   Search + Filter:  top:146, left:20, w:353
 //   Item grid:        top:212, 2 columns (left:20, right:50%+6.5), each 170×149px
-//   Nav:              GlassNavBar
+//   Nav:              NavBar
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   Pressable,
-  ScrollView,
   Image,
   StyleSheet,
   FlatList,
@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import GlassNavBar from '@/components/GlassNavBar';
+import FilterPopup, { type FilterState, EMPTY_FILTERS } from '@/components/FilterPopup';
 import { Colors } from '@/constants/Colors';
 import { FontFamily } from '@/constants/Typography';
 import { useClosetStore, type ClothingItem } from '@/store/closetStore';
@@ -33,10 +33,13 @@ const FH = 852;
 
 type ScanCategory = 'top' | 'bottom' | 'shoes';
 
-const CATEGORY_LABELS: Record<ScanCategory, string> = {
-  top:    'Tops',
-  bottom: 'Bottoms',
-  shoes:  'Shoes',
+const CATEGORY_LABELS: Record<string, string> = {
+  top:       'Tops',
+  bottom:    'Bottoms',
+  shoes:     'Shoes',
+  accessory: 'Accessories',
+  outerwear: 'Outerwear',
+  jewelry:   'Jewelry',
 };
 
 // ─── Item card — 170 × 149, floating image, no border ────────────────────────
@@ -90,9 +93,42 @@ export default function ClosetCategoryScreen() {
   const sx = (x: number) => (x / FW) * sw;
   const sy = (y: number) => (y / FH) * sh;
 
+  const [filterVisible, setFilterVisible]   = useState(false);
+  const [activeFilters, setActiveFilters]   = useState<FilterState>(EMPTY_FILTERS);
+  const [query,         setQuery]           = useState('');
+
   const { items } = useClosetStore();
-  const categoryItems = items.filter((i) => i.category === category);
+
+  // Items in this category, narrowed by search query + active filters
+  const q = query.trim().toUpperCase();
+  const categoryItems = items
+    .filter((i) => i.category === category)
+    .filter((i) =>
+      !q || [i.category, ...(i.tags ?? [])].join(' ').toUpperCase().includes(q),
+    )
+    .filter((i) => {
+      const { types, styles, colours } = activeFilters;
+      const tags = i.clothingTags;
+
+      // No filters applied → show everything
+      if (!types.length && !styles.length && !colours.length) return true;
+
+      // Items without structured tags pass type/style/colour checks only if that filter is empty
+      if (!tags) {
+        return !types.length && !styles.length && !colours.length;
+      }
+
+      const typeMatch   = !types.length   || types.includes(tags.type);
+      const styleMatch  = !styles.length  || styles.some((s) => tags.styles.includes(s));
+      const colourMatch = !colours.length || colours.includes(tags.colour);
+      return typeMatch && styleMatch && colourMatch;
+    });
+
   const title = CATEGORY_LABELS[category ?? 'top'] ?? 'Items';
+
+  // Total active filter count for the badge on the FILTER button
+  const activeFilterCount =
+    activeFilters.types.length + activeFilters.styles.length + activeFilters.colours.length;
 
   // Figma: items are 170px each in a 393px frame (2 columns, left:20, right:50%+6.5)
   // We scale to device width
@@ -136,11 +172,34 @@ export default function ClosetCategoryScreen() {
       <View style={[s.searchRow, { top: sy(146) + insets.top, left: sx(20), width: sx(353) }]}>
         <View style={s.searchPill}>
           <Ionicons name="search-outline" size={12} color={Colors.surface[150]} />
-          <Text style={s.searchPlaceholder}>SEARCH FOR...</Text>
+          <TextInput
+            style={s.searchInput}
+            placeholder="SEARCH FOR..."
+            placeholderTextColor={Colors.surface[150]}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+              <Ionicons name="close" size={12} color={Colors.surface[150]} />
+            </Pressable>
+          )}
         </View>
-        <Pressable style={s.filterBtn} hitSlop={10}>
+        <Pressable
+          style={s.filterBtn}
+          hitSlop={10}
+          onPress={() => setFilterVisible(true)}
+        >
           <Ionicons name="options-outline" size={14} color={Colors.surface[150]} />
           <Text style={s.filterText}>FILTER</Text>
+          {activeFilterCount > 0 && (
+            <View style={s.filterBadge}>
+              <Text style={s.filterBadgeText}>{activeFilterCount}</Text>
+            </View>
+          )}
         </Pressable>
       </View>
 
@@ -163,8 +222,24 @@ export default function ClosetCategoryScreen() {
         />
       )}
 
-      {/* ── Nav bar ─────────────────────────────────────────────────────────── */}
-      <GlassNavBar activeTab={0} />
+      {/* ── MAKE OUTFIT pill — Figma 675:475: w:131 h:40, centred at bottom ─── */}
+      <Pressable
+        style={[s.makeOutfitBtn, { bottom: insets.bottom + 24 }]}
+        onPress={() => router.navigate('/(tabs)/outfit' as any)}
+        accessibilityLabel="Make outfit"
+      >
+        <Ionicons name="shirt-outline" size={18} color={Colors.surface[200]} />
+        <Text style={s.makeOutfitText}>MAKE OUTFIT</Text>
+      </Pressable>
+
+      {/* ── Filter popup ─────────────────────────────────────────────────────── */}
+      <FilterPopup
+        visible={filterVisible}
+        category={category ?? 'top'}
+        initialFilters={activeFilters}
+        onApply={setActiveFilters}
+        onClose={() => setFilterVisible(false)}
+      />
 
     </View>
   );
@@ -228,13 +303,13 @@ const s = StyleSheet.create({
     borderRadius:      4,
     width:             169,
   },
-  searchPlaceholder: {
-    fontFamily:    FontFamily.sans,
-    fontSize:      10,
-    lineHeight:    16,
-    letterSpacing: -0.15,
-    textTransform: 'uppercase',
-    color:         Colors.surface[150],
+  searchInput: {
+    flex:            1,
+    fontFamily:      FontFamily.sans,
+    fontSize:        12,
+    letterSpacing:   -0.18,
+    color:           Colors.surface[200],
+    paddingVertical: 0,
   },
 
   filterBtn: {
@@ -250,6 +325,21 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     color:         Colors.surface[150],
   },
+  filterBadge: {
+    backgroundColor: Colors.surface[200],
+    borderRadius:    8,
+    minWidth:        16,
+    height:          16,
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingHorizontal: 3,
+  },
+  filterBadgeText: {
+    fontFamily: FontFamily.sans,
+    fontSize:   10,
+    color:      Colors.surface[100],
+    lineHeight: 14,
+  },
 
   // ── Grid ─────────────────────────────────────────────────────────────────
   list: {
@@ -257,6 +347,36 @@ const s = StyleSheet.create({
     left:     0,
     right:    0,
     bottom:   0,
+  },
+
+  // ── MAKE OUTFIT pill — Figma 675:475 ─────────────────────────────────────
+  makeOutfitBtn: {
+    position:        'absolute',
+    alignSelf:       'center',
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             10,
+    width:           131,
+    height:          40,
+    borderRadius:    4,
+    borderWidth:     1,
+    borderColor:     Colors.surface[200],
+    backgroundColor: Colors.surface[100],
+    shadowColor:     '#1D1D1D',
+    shadowOffset:    { width: 0, height: 13 },
+    shadowOpacity:   0.05,
+    shadowRadius:    14,
+    elevation:       4,
+    zIndex:          20,
+  },
+  makeOutfitText: {
+    fontFamily:    FontFamily.sans,
+    fontSize:      12,
+    lineHeight:    16,
+    letterSpacing: -0.18,
+    textTransform: 'uppercase',
+    color:         Colors.surface[200],
   },
 
   // ── Empty state ───────────────────────────────────────────────────────────

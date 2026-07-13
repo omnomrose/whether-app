@@ -40,7 +40,7 @@ People who have a hard time deciding what to wear for the day. This is meant for
 - Supabase — database + authentication + image storage
 - PhotoRoom API — AI background removal (sandbox = free + watermarked for dev; swap to production key for release). Fallback: Rembg (open source)
 - Open-Meteo — weather temperature + feels-like + wind data (free, no API key required — https://open-meteo.com)
-- Claude API (claude-sonnet-4-6) — outfit recommendations + clothing auto-tagging via vision
+- Claude API (claude-sonnet-5) — outfit recommendations + clothing auto-tagging via vision. NOTE: "claude-sonnet-4-6" is NOT a valid model ID — it 404s every call.
 - Expo Camera + Expo Image Picker — native camera access for closet scanning
 
 ## PROJECT STRUCTURE
