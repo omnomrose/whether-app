@@ -38,9 +38,9 @@ People who have a hard time deciding what to wear for the day. This is meant for
 - NativeWind v4 — Tailwind styling for React Native
 - Zustand — state management (weatherStore, closetStore, outfitStore)
 - Supabase — database + authentication + image storage
-- PhotoRoom API — AI background removal (sandbox = free + watermarked for dev; swap to production key for release). Fallback: Rembg (open source)
+- Cloudinary — AI background removal (unsigned upload preset + `e_background_removal` delivery effect; async — poll until 423 clears). Fallback: withoutBG API (legacy, credits nearly exhausted)
 - Open-Meteo — weather temperature + feels-like + wind data (free, no API key required — https://open-meteo.com)
-- Claude API (claude-sonnet-4-6) — outfit recommendations + clothing auto-tagging via vision
+- Claude API (claude-sonnet-5) — outfit recommendations + clothing auto-tagging via vision. NOTE: "claude-sonnet-4-6" is NOT a valid model ID — it 404s every call.
 - Expo Camera + Expo Image Picker — native camera access for closet scanning
 
 ## PROJECT STRUCTURE
@@ -68,7 +68,8 @@ store/
 lib/
   supabase.ts              # Supabase client
   weather.ts               # Open-Meteo fetch helpers (geocode + current + hourly)
-  photoroom.ts             # Background removal API
+  photoroom.ts             # Background removal entry point (Cloudinary primary, withoutBG fallback)
+  cloudinary.ts            # Cloudinary unsigned upload + e_background_removal
   claude.ts                # Clothing tagging + outfit suggestion prompts
 
 components/                # Shared UI components (to be created per design)
@@ -83,7 +84,9 @@ assets/                    # Icons, images, splash
 See `.env.example` for all required keys:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- `EXPO_PUBLIC_PHOTOROOM_API_KEY`
+- `EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME`
+- `EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET`
+- `EXPO_PUBLIC_WITHOUTBG_API_KEY` (fallback)
 - `EXPO_PUBLIC_CLAUDE_API_KEY`
 
 ## RULES/NON-NEGOTIABLES
@@ -92,7 +95,7 @@ See `.env.example` for all required keys:
 - Ask before making changes.
 - All env vars use `EXPO_PUBLIC_` prefix (required for Expo to expose to client).
 - Never commit `.env` to git.
-- PhotoRoom sandbox mode is fine for development (watermarked output). Switch to production API key before user-facing release.
+- Cloudinary API secret must NEVER be in the app or `.env` with `EXPO_PUBLIC_` prefix — the unsigned upload preset is the only client-side credential.
 
 ## PACKAGE MANAGEMENT — NON-NEGOTIABLE
 

@@ -5,16 +5,16 @@
 //  • Sky gradient + parallax cloud via SkyBackground
 //  • Location pill: tap → go back to change city
 //  • Temperature: DM Sans 70px  •  Wind: "1.5 KM/H — CLEAR" format
-//  • "IT FEELS" box: glass card with sky-gradient placeholder (stock video TBD)
+//  • "IT FEELS" box: solid card with hourly scroll
 //  • Feels-like caption: short phrase from feelsLike + windSpeed
 //  • "[Name]" from onboarding name step (weatherStore.userName)
-//  • Glass effect (expo-blur BlurView, intensity 80, tint "light") on weather card
+//  • Weather card: solid surface-100, 1px surface-200 border (glass UI removed)
 //  • Hourly scroll: all available 3-hour forecast slots, Figma-exported icons
 //  • Tutorial overlay (Figma 308:26722 + 308:26781):
 //      – After 50 s idle → fade in dim overlay + hint text over 20 s
 //      – After fade completes → closet button pulses to draw attention
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,12 +33,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 import SkyBackground from '@/components/SkyBackground';
 import WeatherIcon from '@/components/WeatherIcon';
-import GlassNavBar from '@/components/GlassNavBar';
+import NavBar from '@/components/NavBar';
 import { Colors } from '@/constants/Colors';
 import { Typography, FontFamily } from '@/constants/Typography';
 import { useWeatherStore, type HourlyItem } from '@/store/weatherStore';
@@ -95,7 +95,7 @@ function PfpCircle({ name }: { name: string | null }) {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function LocationSetScreen() {
   const insets              = useSafeAreaInsets();
-  const { height: screenH } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const { location, displayLocation, weather, setWeather, userName } = useWeatherStore();
 
   const [loading,    setLoading]    = useState(!weather);
@@ -150,9 +150,6 @@ export default function LocationSetScreen() {
   // Once the fade completes the closet button starts a gentle scale pulse.
   const tutorialOpacity      = useSharedValue(0);
   const closetScale          = useSharedValue(1);
-  // Ref + state for floating closet button position
-  const closetPlaceholderRef = useRef<View>(null);
-  const [closetPos, setClosetPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const tid = setTimeout(() => {
@@ -175,14 +172,6 @@ export default function LocationSetScreen() {
   const closetScaleStyle   = useAnimatedStyle(() => ({
     transform: [{ scale: closetScale.value }],
   }));
-  // White glow ring around the closet button — appears as tutorial fades in
-  const closetRingStyle    = useAnimatedStyle(() => ({
-    opacity: tutorialOpacity.value,
-  }));
-  // In-panel placeholder fades OUT as the floating button fades in
-  const closetOriginalStyle = useAnimatedStyle(() => ({
-    opacity: 1 - tutorialOpacity.value,
-  }));
 
   const locationLabel = displayLocation
     ? displayLocation.split(', ').slice(0, 2).join(', ')
@@ -195,7 +184,7 @@ export default function LocationSetScreen() {
         {/* ── Top bar ───────────────────────────────────────────────── */}
         <View style={[s.topBar, { top: insets.top + 8 }]}>
           <ProgressDots step={3} total={4} />
-          <Pressable hitSlop={12} onPress={() => router.replace('/(tabs)')}>
+          <Pressable hitSlop={12} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)'); }}>
             <Text style={s.skip}>SKIP</Text>
           </Pressable>
         </View>
@@ -207,15 +196,10 @@ export default function LocationSetScreen() {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <LinearGradient
-            colors={[Colors.surface[100], 'rgba(245,244,244,0)']}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-            style={s.locationPillGradient}
-          >
+          <View style={s.locationPillGradient}>
             <Ionicons name="location-outline" size={12} color={Colors.surface[200]} />
             <Text style={s.locationText} numberOfLines={1}>{locationLabel}</Text>
-          </LinearGradient>
+          </View>
         </Pressable>
 
         {/* ── PFP — top right (Figma 387:134, 34×34) ───────────────── */}
@@ -226,8 +210,8 @@ export default function LocationSetScreen() {
         {/* ── Heading ───────────────────────────────────────────────── */}
         <Text style={[s.heading, { top: headingTop }]}>{heading}</Text>
 
-        {/* ── Bottom panel: fade → glass card ───────────────────────── */}
-        {/* Extra bottom padding reserves space for GlassNavBar           */}
+        {/* ── Bottom panel ─────────────────────────────────────────── */}
+        {/* Extra bottom padding reserves space for NavBar           */}
         <LinearGradient
           colors={['rgba(245,244,244,0)', Colors.surface[100], Colors.surface[100]]}
           locations={[0, 0.22, 1]}
@@ -238,32 +222,20 @@ export default function LocationSetScreen() {
           <View style={s.dressingRow}>
             <Pressable
               style={s.dressingPill}
-              onPress={() => router.push('/(onboarding)/closet-setup')}
+              onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
             >
               <Text style={s.dressingText}>I'M DRESSING FOR...</Text>
               <Ionicons name="chevron-down" size={10} color={Colors.surface[200]} />
             </Pressable>
 
+            {/* Refresh + outfit-maker buttons — mirrors home (Figma 675:602) */}
             <View style={s.iconGroup}>
-              <Pressable style={s.iconBtn} onPress={() => router.replace('/(tabs)/outfit')} hitSlop={4}>
-                <Ionicons name="body-outline" size={19} color={Colors.surface[200]} />
+              <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)/outfit'); }} hitSlop={4}>
+                <Ionicons name="refresh-outline" size={19} color={Colors.surface[200]} />
               </Pressable>
-              {/* Closet btn placeholder — fades out as tutorial fades in.        */}
-              {/* A floating copy (zIndex 52, outside SkyBackground) takes over. */}
-              <Animated.View style={closetOriginalStyle}>
-                <View
-                  ref={closetPlaceholderRef}
-                  onLayout={() => {
-                    closetPlaceholderRef.current?.measureInWindow((x, y) => {
-                      setClosetPos({ x, y });
-                    });
-                  }}
-                >
-                  <Pressable style={s.iconBtn} onPress={() => router.push('/(onboarding)/closet-setup')} hitSlop={4}>
-                    <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
-                  </Pressable>
-                </View>
-              </Animated.View>
+              <Pressable style={s.iconBtn} onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.replace('/(tabs)/outfit'); }} hitSlop={4}>
+                <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
+              </Pressable>
             </View>
           </View>
 
@@ -286,32 +258,11 @@ export default function LocationSetScreen() {
             </View>
           )}
 
-          {/* ── Weather card (glass) ─────────────────────────────────── */}
+          {/* ── Weather card — solid surface-100, design-system border ── */}
           {weather && !loading && (
             <>
-              <BlurView
-                intensity={80}
-                tint="light"
-                style={s.glassCard}
-              >
-                {/* Glass rim — solid white 1.5px line at the very top, simulates light hitting the edge */}
-                <View style={s.glassRim} pointerEvents="none" />
-
-                {/* Gloss gradient — bright specular at top fading to transparent, the core of the glassy look */}
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.65)', 'rgba(255,255,255,0)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={s.glossShine}
-                  pointerEvents="none"
-                />
-
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.68)', 'rgba(255,255,255,0.36)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={s.cardInner}
-                >
+              <View style={s.weatherCard}>
+                <View style={s.cardInner}>
 
                   {/* Left — IT'S CURRENTLY */}
                   <View style={s.weatherLeft}>
@@ -349,8 +300,8 @@ export default function LocationSetScreen() {
                     </Text>
                   </View>
 
-                </LinearGradient>
-              </BlurView>
+                </View>
+              </View>
 
               {/* Hourly scroll is now inside the IT FEELS right column */}
             </>
@@ -378,36 +329,36 @@ export default function LocationSetScreen() {
 
       </SkyBackground>
 
-      {/* ── Glass nav bar — zIndex 55, above tutorial overlay (50) ───── */}
-      <GlassNavBar activeTab={2} />
+      {/* ── Nav bar — zIndex 55, above tutorial overlay (50) ────────── */}
+      <NavBar activeTab={2} />
 
-      {/* ── Floating closet button ────────────────────────────────────── */}
-      {/* Rendered outside SkyBackground (no overflow:hidden clip).       */}
-      {/* Position mirrors the in-panel placeholder via measureInWindow.  */}
-      {/* zIndex 52 > overlay (50) → only this button is above the dim.  */}
-      {closetPos !== null && (
-        <Animated.View
-          style={[
-            s.floatingCloset,
-            { left: closetPos.x, top: closetPos.y },
-            tutorialFadeStyle,
-            closetScaleStyle,
-          ]}
-        >
-          {/* Glow ring */}
-          <Animated.View
-            style={[StyleSheet.absoluteFill, s.closetRing, closetRingStyle]}
-            pointerEvents="none"
-          />
-          <Pressable
-            style={s.iconBtn}
-            onPress={() => router.push('/(onboarding)/closet-setup')}
-            hitSlop={4}
-          >
-            <Ionicons name="shirt-outline" size={19} color={Colors.surface[200]} />
-          </Pressable>
-        </Animated.View>
-      )}
+      {/* ── Tutorial camera highlight — Figma 675:602 tutorial frames ─── */}
+      {/* Pulsing white spotlight behind the nav bar's camera slot.        */}
+      {/* zIndex 54 sits above the dim overlay (50) and below NavBar (55). */}
+      <Animated.View
+        style={[
+          s.cameraSpotlight,
+          {
+            left:   screenW / 2 - 22,
+            bottom: insets.bottom + 10 - 0.5,   // centred on the 43px pill
+          },
+          tutorialFadeStyle,
+          closetScaleStyle,
+        ]}
+        pointerEvents="none"
+      />
+
+      {/* During onboarding, the camera slot opens the closet tutorial     */}
+      {/* (Figma 144:68) instead of the quick camera. Transparent overlay  */}
+      {/* exactly over the nav camera section, above NavBar.               */}
+      <Pressable
+        style={[
+          s.cameraSlotPress,
+          { left: screenW / 2 - 25.5, bottom: insets.bottom + 10 },
+        ]}
+        onPress={() => { supabase.auth.updateUser({ data: { whether_onboarded: true } }); router.push('/(onboarding)/closet-setup'); }}
+        accessibilityLabel="Start building your closet"
+      />
 
     </View>
   );
@@ -436,6 +387,7 @@ const s = StyleSheet.create({
 
   // ── Location pill ─────────────────────────────────────────────────────────
   locationPill: { position: 'absolute', left: 20, zIndex: 10 },
+  // Solid surface-100 pill with surface-200 border (glass UI removed)
   locationPillGradient: {
     flexDirection:     'row',
     alignItems:        'center',
@@ -444,7 +396,8 @@ const s = StyleSheet.create({
     paddingVertical:   4,
     borderRadius:      20,
     borderWidth:       1,
-    borderColor:       Colors.surface[100],
+    borderColor:       Colors.surface[200],
+    backgroundColor:   Colors.surface[100],
   },
   locationText: { ...Typography.caption, color: Colors.surface[200] },
 
@@ -513,44 +466,24 @@ const s = StyleSheet.create({
     marginBottom:   12,
   },
 
-  // ── Glass weather card ────────────────────────────────────────────────────
-  // Figma: glass-bg effect (type GLASS, radius 12), border surface-100, radius 20
-  // Gloss recipe: intensity-80 blur + glossShine gradient + bright rim + white-gradient inner.
-  glassCard: {
-    borderRadius:  20,
-    overflow:      'hidden',
-    marginBottom:  16,
-    // Bright border — crisp specular edge around the whole card
-    borderWidth:   1,
-    borderColor:   'rgba(255,255,255,0.85)',
-    // Soft depth shadow
-    shadowColor:    '#000',
-    shadowOffset:   { width: 0, height: 4 },
-    shadowOpacity:  0.10,
-    shadowRadius:   16,
-    elevation:      6,
-  },
-  // Solid white 1.5px line — sharpest light catch at the very top edge
-  glassRim: {
-    position:        'absolute',
-    top:             0, left: 0, right: 0,
-    height:          1.5,
-    backgroundColor: 'rgba(255,255,255,1.0)',
-    zIndex:          2,
-  },
-  // Full-card specular shine: bright at top, invisible at bottom (classic gloss)
-  glossShine: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 64,
-    zIndex: 1,
+  // ── Weather card — solid surface-100, 1px surface-200 border (no glass) ──
+  weatherCard: {
+    borderRadius:    8,
+    overflow:        'hidden',
+    marginBottom:    16,
+    borderWidth:     1,
+    borderColor:     Colors.surface[200],
+    backgroundColor: Colors.surface[100],
+    shadowColor:     '#1D1D1D',
+    shadowOffset:    { width: 0, height: 13 },
+    shadowOpacity:   0.05,
+    shadowRadius:    14,
+    elevation:       6,
   },
   cardInner: {
     flexDirection: 'row',
     padding:       20,
     gap:           16,
-    zIndex:        1,
-    // backgroundColor intentionally absent — LinearGradient handles the tint
   },
 
   // Left column
@@ -650,24 +583,28 @@ const s = StyleSheet.create({
     textAlign:     'center',
     width:         268,
   },
-  // Floating closet button — sibling of SkyBackground, no overflow:hidden clip,
-  // zIndex 52 > overlay (50) so only this element sits above the dim layer.
-  floatingCloset: {
-    position: 'absolute',
-    zIndex:   52,
+  // Tutorial camera spotlight — pulsing white circle behind the nav bar's
+  // camera slot (Figma 675:602 tutorial frames). Nav pill is 153×43 centred;
+  // the camera slot is its middle third → screen-centred 44px circle.
+  cameraSpotlight: {
+    position:        'absolute',
+    width:           44,
+    height:          44,
+    borderRadius:    22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    shadowColor:     '#fff',
+    shadowOffset:    { width: 0, height: 0 },
+    shadowOpacity:   0.9,
+    shadowRadius:    10,
+    zIndex:          54,
   },
-
-  // White glow ring around the closet button (Figma 308:26781)
-  // Opacity is driven by tutorialOpacity (0→1 with the fade)
-  closetRing: {
-    borderRadius:  22,      // iconBtn is 40×40 r:20; ring bleeds 2px outside
-    margin:        -2,
-    borderWidth:   2,
-    borderColor:   'rgba(255,255,255,0.85)',
-    shadowColor:   '#fff',
-    shadowOffset:  { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius:  8,
+  // Transparent pressable over the camera slot — routes to the closet
+  // tutorial during onboarding (zIndex 56 > NavBar 55).
+  cameraSlotPress: {
+    position: 'absolute',
+    width:    51,   // pill 153 / 3
+    height:   43,
+    zIndex:   56,
   },
 
   // ── Hourly scroll (shared cell styles) ───────────────────────────────────

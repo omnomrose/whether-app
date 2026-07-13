@@ -1,12 +1,12 @@
 // Onboarding — city/location picker
-// Figma 144:45 (Search Container collapsed) + 144:456 (Search Container expanded)
+// Figma 144:45 (Search Container collapsed) + 335:113 (Search Container expanded)
 // Frame: 393 × 852
 //
 // Key design decisions:
 //  - Card is ALWAYS full-width (left:0, right:0) — only `top` and `maxHeight` morph
 //  - Morph runs on the Reanimated UI thread (withTiming) for a native 60fps feel
-//  - Glass card: pure-RN layered approach (base fill + sheen + shadow) — no native blur needed
-//  - LinearGradient header matches the Figma fade-from-surface overlay
+//  - Panel: solid surface-100 card (glass UI removed)
+//  - Header is a solid surface-100 View (no gradient — matches final Figma)
 //  - Location button is ABOVE the search bar (corrected from earlier reversed order)
 //  - Result rows: building icon + highlighted query match + muted remainder
 
@@ -21,11 +21,11 @@ import {
   Keyboard,
   useWindowDimensions,
   ScrollView,
+  Image,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -39,20 +39,21 @@ import WebView from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ExpoLocation from 'expo-location';
+import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
-import { Typography } from '@/constants/Typography';
+import { Typography, FontFamily } from '@/constants/Typography';
 import { useWeatherStore } from '@/store/weatherStore';
 
 // ─── Figma constants (frame 393 × 852) ───────────────────────────────────────
 const FIGMA_H         = 852;
-// Search Container positions
-const CARD_TOP_IDLE   = 672;   // node 161:256
-const CARD_TOP_FOCUS  = 481;   // node 189:435
-const CARD_H_IDLE     = 180;   // node 161:256
-const CARD_H_FOCUS    = 371;   // node 189:435
+// Search Container positions (Figma node ids)
+const CARD_TOP_IDLE   = 670;   // node 161:256 top
+const CARD_TOP_FOCUS  = 320;   // node 335:115 top
+const CARD_H_IDLE     = 180;   // node 161:256 height
+const CARD_H_FOCUS    = 532;   // node 335:115 height
 // Results list
-const RESULTS_MAX_H   = 130;   // node 189:446 height
-const THUMB_H         = 35;
+const RESULTS_MAX_H   = 130;   // node 335:126 height
+const THUMB_H         = 73;    // node 335:139 height (scrollbar pill)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Morph animation configs ──────────────────────────────────────────────────
@@ -215,11 +216,9 @@ function ResultRow({
 
   return (
     <Pressable style={s.resultRow} onPress={onPress} hitSlop={4}>
-      <Ionicons
-        name="business-outline"
-        size={16}
-        color={Colors.surface[30]}
-        style={s.resultIcon}
+      <Image
+        source={require('@/assets/images/icons/icon-business.png')}
+        style={[s.resultIcon, { width: 16, height: 16, tintColor: Colors.surface[30] }]}
       />
       {matchIdx === -1 ? (
         <Text style={s.resultDim} numberOfLines={1}>{label}</Text>
@@ -240,12 +239,13 @@ function ResultRow({
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function LocationScreen() {
-  const [query,       setQuery]       = useState('');
-  const [results,     setResults]     = useState<GeoResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [contentH,    setContentH]    = useState(0);
-  const [scrollY,     setScrollY]     = useState(0);
+  const [query,            setQuery]            = useState('');
+  const [results,          setResults]          = useState<GeoResult[]>([]);
+  const [isSearching,      setIsSearching]      = useState(false);
+  const [loading,          setLoading]          = useState(false);
+  const [contentH,         setContentH]         = useState(0);
+  const [scrollY,          setScrollY]          = useState(0);
+  const [confirmedResult,  setConfirmedResult]  = useState<GeoResult | null>(null);
 
   const webRef       = useRef<WebView>(null);
   const inputRef     = useRef<TextInput>(null);
@@ -265,7 +265,7 @@ export default function LocationScreen() {
   const focusH   = (CARD_H_FOCUS   / FIGMA_H) * screenH;
 
   // ── Reanimated shared values for the morph ──────────────────────────────
-  // `height` (not maxHeight) so the glass panel always fills its designed
+  // `height` (not maxHeight) so the panel always fills its designed
   // Figma footprint — empty space below results is intentional per the design.
   const cardTop = useSharedValue(idleTop);
   const cardH   = useSharedValue(idleH);
@@ -379,8 +379,13 @@ export default function LocationScreen() {
     setDisplayLocation(label);
     Keyboard.dismiss();
     dismissSearch();
-    // Wait for the collapse animation to start before pushing the next screen
-    setTimeout(() => router.push('/(onboarding)/location-set'), 500);
+    // Show the confirm button (Figma node 343:161 — checkmark at top:621)
+    setTimeout(() => setConfirmedResult(result), 460);
+  };
+
+  const handleConfirm = () => {
+    setConfirmedResult(null);
+    router.push('/(onboarding)/location-set');
   };
 
   const handleSubmit = async () => {
@@ -433,50 +438,31 @@ export default function LocationScreen() {
       />
 
       {/* ── Header — Figma node 185:347 ──────────────────────────────────── */}
-      {/* glass-linear: transparent (top) → solid #f5f4f4 (bottom)            */}
-      {/* glass-bg radius:12 — approximated with a 3-stop gradient that        */}
-      {/* ramps up opacity gradually, giving a frosted-in-from-above look.     */}
-      {/* justify-end pins progress + title to the solid bottom of the pane.   */}
-      <LinearGradient
-        colors={[
-          'rgba(245,244,244,0)',    // 0 %  — fully transparent, map shows through
-          'rgba(245,244,244,0.72)', // 48 % — soft midpoint (simulates blur diffusion)
-          Colors.surface[100],     // 100 % — fully solid behind the title
-        ]}
-        locations={[0, 0.48, 1]}
-        style={[s.header, { paddingTop: insets.top + 4 }]}
+      {/* Solid surface-100 fill per Figma (no gradient in final design).      */}
+      {/* justify-end pins progress + title to the bottom of the pane.         */}
+      <View
+        style={[s.header, { paddingTop: insets.top + 4, backgroundColor: Colors.surface[100] }]}
         pointerEvents="box-none"
       >
         <View style={s.headerRow}>
           <ProgressDots step={2} total={4} />
-          <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={12}>
+          <Pressable
+            onPress={() => {
+              supabase.auth.updateUser({ data: { whether_onboarded: true } });
+              router.replace('/(tabs)');
+            }}
+            hitSlop={12}
+          >
             <Text style={s.skip}>SKIP</Text>
           </Pressable>
         </View>
         <Text style={s.title}>Which city are you based in?</Text>
-      </LinearGradient>
+      </View>
 
       {/* ── Morphing Search Container ─────────────────────────── */}
       <Animated.View style={[s.card, cardStyle]}>
-        {/* ── Pure-RN glass layers (no native blur — BlurView can't blur WebView) */}
-        {/* 1. glass-linear — surface-100 solid at bottom, transparent at top     */}
-        {/*    Same gradient recipe as ClosetTutorialCard for consistent glass fx  */}
-        <LinearGradient
-          colors={['#f5f4f4', 'rgba(245,244,244,0)']}
-          start={{ x: 0, y: 1 }}
-          end={{ x: 0, y: 0 }}
-          style={[StyleSheet.absoluteFill, s.glassBase]}
-        />
-        {/* 2. Specular shine — bright at top, fades to transparent (classic gloss) */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={s.glossShine}
-          pointerEvents="none"
-        />
-        {/* 3. Rim — 1.5 px solid white line catches light at the very top edge  */}
-        <View style={s.glassRim} pointerEvents="none" />
+        {/* Solid surface-100 panel — glass UI removed from the design system */}
+        <View style={[StyleSheet.absoluteFill, s.panelBase]} />
 
         <View style={s.inner}>
 
@@ -485,20 +471,18 @@ export default function LocationScreen() {
 
             {/* 1 — Use current location (location btn always on top) */}
             <Pressable style={s.locationRow} onPress={handleCurrentLocation}>
-              <Ionicons
-                name="location-outline"
-                size={16}
-                color={Colors.surface[150]}
+              <Image
+                source={require('@/assets/images/icons/icon-location.png')}
+                style={{ width: 16, height: 16, tintColor: Colors.surface[150] }}
               />
               <Text style={s.locationText}>USE CURRENT LOCATION</Text>
             </Pressable>
 
-            {/* 2 — Search bar */}
+            {/* 2 — Search bar — solid surface-100 in both states */}
             <View style={[s.searchBar, isSearching && s.searchBarActive]}>
-              <Ionicons
-                name="search-outline"
-                size={13}
-                color={isSearching ? Colors.surface[200] : Colors.surface[150]}
+              <Image
+                source={require('@/assets/images/icons/icon-search.png')}
+                style={{ width: 13, height: 13, tintColor: isSearching ? Colors.surface[200] : Colors.surface[150] }}
               />
               <TextInput
                 ref={inputRef}
@@ -565,12 +549,25 @@ export default function LocationScreen() {
             // Figma node 179:284 "instructions caption" — py:8
             <View style={s.captionRow}>
               <Text style={s.caption}>
-                search for a city to see what the weather is like there
+                search to see what the weather is like there
               </Text>
             </View>
           )}
         </View>
       </Animated.View>
+
+      {/* ── Confirm button — Figma node 343:161 ──────────────────── */}
+      {/* Appears after a city is selected; top:621 on 852 frame     */}
+      {/* 40×40 circle with checkmark, right-aligned near map edge   */}
+      {confirmedResult !== null && (
+        <Pressable
+          style={[s.confirmBtn, { top: (621 / FIGMA_H) * screenH }]}
+          onPress={handleConfirm}
+          hitSlop={8}
+        >
+          <Ionicons name="checkmark" size={20} color={Colors.surface[200]} />
+        </Pressable>
+      )}
 
     </View>
   );
@@ -582,8 +579,8 @@ const s = StyleSheet.create({
   webview: { flex: 1 },
 
   // ── Header — Figma 185:347 ────────────────────────────────────────────────
-  // glass-linear gradient: transparent (top) → solid surface-100 (bottom)
-  // glass-bg radius:12 — simulated with a 3-stop gradient ramp
+  // Solid surface-100 panel (glass UI removed)
+  
   // justify-end: progress + title pin to the opaque bottom of the pane
   // border-b: hairline at the bottom separates header from map
   header: {
@@ -601,11 +598,11 @@ const s = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   skip:      { ...Typography.caption, color: Colors.surface[150] },
-  title:     { ...Typography.titleLg, color: Colors.surface[200] },
+  title:     { ...Typography.titleLg, fontSize: 18, lineHeight: 22, letterSpacing: -0.9, color: Colors.surface[200] },
 
-  // ── Progress dots — Figma: 9×9 circles, gap:3 ────────────────────────────
+  // ── Progress dots — Figma: 6×6 circles, gap:3 ────────────────────────────
   dots:   { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dot:    { width: 9, height: 9, borderRadius: 5 },
+  dot:    { width: 6, height: 6, borderRadius: 3 },
   dotOn:  { backgroundColor: Colors.surface[200] },
   dotOff: { backgroundColor: 'rgba(43,30,30,0.18)' },
 
@@ -628,34 +625,16 @@ const s = StyleSheet.create({
     shadowRadius:    18,
     elevation:       10,
   },
-  // glass-linear base — gradient handled by LinearGradient in JSX.
-  // borderRadius clips the gradient to the card shape.
-  glassBase: {
-    borderRadius: 16,
-  },
-  // Specular shine — bright white gradient covering top 64 px of the card
-  glossShine: {
-    position: 'absolute',
-    top:      0,
-    left:     0,
-    right:    0,
-    height:   64,
-    zIndex:   1,
-  },
-  // 1.5 px solid white rim — sharpest light catch at the very top edge
-  glassRim: {
-    position:        'absolute',
-    top:             0,
-    left:            0,
-    right:           0,
-    height:          1.5,
-    backgroundColor: 'rgba(255,255,255,1.0)',
-    zIndex:          2,
+  // Solid surface-100 panel base (glass UI removed)
+  panelBase: {
+    borderRadius:    16,
+    backgroundColor: Colors.surface[100],
   },
   // Inner content — Figma padding: px-24, py-12 (idle) / p-24 (focused)
   inner: {
-    padding: 20,   // Figma inner container is 353px = 393 - 20*2
-    gap:     16,
+    paddingHorizontal: 24,
+    paddingVertical:   12,
+    gap:               20,
   },
 
   // ── Top group: location btn + search bar, gap:12 ─────────────────────────
@@ -673,27 +652,27 @@ const s = StyleSheet.create({
   },
   locationText: { ...Typography.caption, color: Colors.surface[150] },
 
-  // Search bar — Figma: px-16, py-8, radius:200, border:surface-100
-  // Idle: gradient bg (surface-100 → transparent, bottom→top)
-  // Active: solid surface-100 bg
+  // Search bar
+  // Idle  (Figma 144:56): radius:4, solid surface-100 bg
+  // Active (Figma 335:121): radius:200 pill, solid surface-100 bg
   searchBar: {
     flexDirection:     'row',
     alignItems:        'center',
     gap:               10,
     height:            32,
     paddingHorizontal: 16,
-    borderRadius:      200,
+    borderRadius:      4,                          // Figma idle: radius-1 = 4
     borderWidth:       1,
-    borderColor:       Colors.surface[100],
-    backgroundColor:   'rgba(245,244,244,0.45)',   // idle: slightly transparent
+    borderColor:       Colors.surface[150],        // #786c6c in both states
+    backgroundColor:   Colors.surface[100],
+    overflow:          'hidden',
   },
   searchBarActive: {
-    backgroundColor: Colors.surface[100],          // active: solid fill
-    borderColor:     Colors.surface[100],
+    borderRadius: 200,                             // Figma active: radius-10 = 200 (pill)
   },
   searchInput: {
     flex:          1,
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,                // DM Mono Regular
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
@@ -709,15 +688,16 @@ const s = StyleSheet.create({
     opacity:         0.2,
   },
 
-  // ── Caption — Figma node 179:284, fontSize:10, py:8 ─────────────────────
+  // ── Caption — Figma node 179:284 (caption-2: DM Mono 10px), py:8 ─────────
   captionRow: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   caption: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,                // DM Mono Regular
     fontSize:      10,
     lineHeight:    16,
-    letterSpacing: -0.18,
+    letterSpacing: -0.15,                          // Figma caption-2: tracking-[-0.15px]
     color:         Colors.surface[150],
     textAlign:     'center',
+    textTransform: 'uppercase',
   },
 
   // ── Results — Figma 189:446 "indexing city results": h:130, py:8, gap:20 ─
@@ -738,25 +718,44 @@ const s = StyleSheet.create({
     gap:           14,
   },
   resultIcon: { flexShrink: 0 },
-  // Muted portion of the label
+  // Muted portion of the label (DM Mono, surface-30 #5b5a5a)
   resultDim: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
     color:         Colors.surface[30],   // #5b5a5a
     flexShrink:    1,
   },
-  // Matched (typed) portion of the label
+  // Matched (typed) portion — near-black #1e1e1e per Figma 335:130
   resultMatch: {
-    fontFamily:    'PublicSans_400Regular',
+    fontFamily:    FontFamily.sans,
     fontSize:      12,
     lineHeight:    16,
     letterSpacing: -0.18,
-    color:         '#1e1e1e',            // Figma: near-black for the match
+    color:         '#1e1e1e',
   },
 
-  // ── Custom scrollbar — Figma 144:467: w:2, h:35, #d9d9d9, radius:100 ────
+  // ── Confirm button — Figma node 343:161: 40×40 circle at top:621 right:20 ─
+  // calc(83.33%+5.5px) ≈ 333px from left on 393px frame → right:~40px
+  confirmBtn: {
+    position:        'absolute',
+    right:           20,
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: Colors.surface[100],
+    alignItems:      'center',
+    justifyContent:  'center',
+    zIndex:          15,
+    shadowColor:     '#1d1d1d',
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.10,
+    shadowRadius:    8,
+    elevation:       4,
+  },
+
+  // ── Custom scrollbar — Figma 335:139: w:2, h:73, #d9d9d9, radius:100 ────
   scrollTrack: {
     width:          10,   // wider tap target; visual thumb is 2px
     justifyContent: 'flex-start',
